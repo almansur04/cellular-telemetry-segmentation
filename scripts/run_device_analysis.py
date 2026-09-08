@@ -6,6 +6,7 @@ import sys
 
 import pandas as pd
 
+# Make repository-level src imports available when running this script directly.
 sys.path.append(
     str(
         Path(__file__)
@@ -53,6 +54,7 @@ def main() -> None:
         config
     )
 
+    # Reuse the cleaned Parquet artifact produced by the preprocessing pipeline.
     df = load_cleaned_parquet(
         config["data"][
             "cleaned_parquet_path"
@@ -63,24 +65,25 @@ def main() -> None:
         "device_analysis"
     ]
 
-    clean_room = (
-        create_device_subset(
-            df,
-            reference_url=da[
-                "reference_url"
-            ],
-            allowed_networks=da[
-                "allowed_networks"
-            ],
-            rsrp_min_dbm=da[
-                "rsrp_min_dbm"
-            ],
-            min_device_sessions=da[
-                "min_device_sessions"
-            ],
-        )
+    # Apply the predefined workload and operating-condition restrictions
+    # before comparing device-model throughput distributions.
+    clean_room = create_device_subset(
+        df,
+        reference_url=da[
+            "reference_url"
+        ],
+        allowed_networks=da[
+            "allowed_networks"
+        ],
+        rsrp_min_dbm=da[
+            "rsrp_min_dbm"
+        ],
+        min_device_sessions=da[
+            "min_device_sessions"
+        ],
     )
 
+    # Generate complementary descriptive and inferential statistics.
     summary = device_summary(
         clean_room
     )
@@ -110,6 +113,7 @@ def main() -> None:
         clean_room
     )
 
+    # Persist tabular outputs for downstream reporting and reproducibility.
     save_csv(
         summary,
         Path(
@@ -146,9 +150,11 @@ def main() -> None:
                 "tables"
             ]
         )
-        / "dunn_bonferroni.csv"
+        / "dunn_bonferroni.csv",
+        index=False,
     )
 
+    # Store the omnibus test separately as a compact machine-readable metric artifact.
     save_json(
         kw,
         Path(
@@ -159,6 +165,7 @@ def main() -> None:
         / "kruskal_wallis.json",
     )
 
+    # Generate the primary figures used to communicate device-level effects.
     plot_device_boxplot(
         clean_room,
         Path(
