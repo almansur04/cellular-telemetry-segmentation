@@ -4,6 +4,9 @@ import argparse
 from pathlib import Path
 import sys
 
+import pandas as pd
+
+# Make repository-level src imports available when running this script directly.
 sys.path.append(
     str(
         Path(__file__)
@@ -50,6 +53,7 @@ def main() -> None:
         config
     )
 
+    # Use the cleaned Parquet artifact shared by the analysis pipeline.
     df = load_cleaned_parquet(
         config["data"][
             "cleaned_parquet_path"
@@ -76,31 +80,28 @@ def main() -> None:
         "ml"
     ]
 
+    # Select a chronological split when evaluating on future observations.
     if ml_cfg[
         "use_temporal_split"
     ]:
-        train, test = (
-            temporal_split(
-                working,
-                test_fraction=ml_cfg[
-                    "test_size"
-                ],
-            )
+        train, test = temporal_split(
+            working,
+            test_fraction=ml_cfg[
+                "test_size"
+            ],
         )
 
         split_name = "temporal"
 
     else:
-        train, test = (
-            random_split(
-                working,
-                test_fraction=ml_cfg[
-                    "test_size"
-                ],
-                random_state=config[
-                    "project"
-                ]["random_seed"],
-            )
+        train, test = random_split(
+            working,
+            test_fraction=ml_cfg[
+                "test_size"
+            ],
+            random_state=config[
+                "project"
+            ]["random_seed"],
         )
 
         split_name = "random"
@@ -121,25 +122,23 @@ def main() -> None:
         f"Test rows: {len(test):,}"
     )
 
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
     # Baseline
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
     ridge = build_ridge_model(
         alpha=ml_cfg[
             "ridge"
         ]["alpha"]
     )
 
-    ridge_metrics = (
-        evaluate_model_with_ci(
-            ridge,
-            train,
-            test,
-            feature_columns,
-            iterations=1000,
-            confidence=0.95,
-            random_state=seed,
-        )
+    ridge_metrics = evaluate_model_with_ci(
+        ridge,
+        train,
+        test,
+        feature_columns,
+        iterations=1000,
+        confidence=0.95,
+        random_state=seed,
     )
 
     ridge_metrics.update(
@@ -151,9 +150,9 @@ def main() -> None:
         }
     )
 
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
     # Random Forest
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
     rf_cfg = ml_cfg[
         "random_forest"
     ]
@@ -171,16 +170,14 @@ def main() -> None:
         random_state=seed,
     )
 
-    rf_metrics = (
-        evaluate_model_with_ci(
-            rf,
-            train,
-            test,
-            feature_columns,
-            iterations=1000,
-            confidence=0.95,
-            random_state=seed,
-        )
+    rf_metrics = evaluate_model_with_ci(
+        rf,
+        train,
+        test,
+        feature_columns,
+        iterations=1000,
+        confidence=0.95,
+        random_state=seed,
     )
 
     rf_metrics.update(
@@ -197,12 +194,13 @@ def main() -> None:
         rf_metrics,
     ]
 
+    # Persist comparable model metrics for reproducible reporting.
+    model_comparison_df = pd.DataFrame(
+        model_comparison
+    )
+
     save_csv(
-        __import__(
-            "pandas"
-        ).DataFrame(
-            model_comparison
-        ),
+        model_comparison_df,
         Path(
             config["output"][
                 "tables"
@@ -231,19 +229,18 @@ def main() -> None:
         / "ml_ridge_metrics.json",
     )
 
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
     # Permutation importance
-    # --------------------------------------------------------
-    importance = (
-        grouped_permutation_importance(
-            rf,
-            test,
-            feature_columns,
-            repeats=ml_cfg[
-                "permutation_repeats"
-            ],
-            random_state=seed,
-        )
+    # ------------------------------------------------------------------
+    # Measure feature contribution on held-out data rather than training data.
+    importance = grouped_permutation_importance(
+        rf,
+        test,
+        feature_columns,
+        repeats=ml_cfg[
+            "permutation_repeats"
+        ],
+        random_state=seed,
     )
 
     save_csv(
@@ -271,11 +268,7 @@ def main() -> None:
     )
 
     print(
-        __import__(
-            "pandas"
-        ).DataFrame(
-            model_comparison
-        ).to_string(
+        model_comparison_df.to_string(
             index=False
         )
     )
