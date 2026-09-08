@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 
+# Make repository-level src imports available when running this script directly.
 sys.path.append(
     str(
         Path(__file__)
@@ -49,6 +50,7 @@ def main() -> None:
         config
     )
 
+    # Reuse the cleaned dataset produced by the shared preprocessing pipeline.
     df = load_cleaned_parquet(
         config["data"][
             "cleaned_parquet_path"
@@ -59,6 +61,8 @@ def main() -> None:
         "cell_analysis"
     ]
 
+    # Convert session telemetry into deterministic latency and throughput
+    # failure indicators using the configured operational thresholds.
     df = add_session_failures(
         df,
         latency_failure_ms=ca[
@@ -72,6 +76,8 @@ def main() -> None:
         ],
     )
 
+    # Aggregate session-level failures into cell-level severity and
+    # coverage/capacity triage metrics.
     cell_stats = aggregate_cells(
         df,
         min_sessions=ca[
@@ -95,10 +101,13 @@ def main() -> None:
         ],
     )
 
+    # Keep impact ranking and failure-rate severity available as separate
+    # views so operational volume is not conflated with proportional severity.
     table = impact_severity_table(
         cell_stats
     )
 
+    # Persist full-resolution outputs for reproducible downstream analysis.
     save_csv(
         cell_stats,
         Path(
@@ -129,6 +138,7 @@ def main() -> None:
         / "cell_summary.json",
     )
 
+    # Generate complementary views of failure concentration and cell severity.
     plot_cell_pareto(
         cell_stats,
         Path(
