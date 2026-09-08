@@ -8,15 +8,16 @@ import pandas as pd
 import yaml
 
 
+# Anchor relative paths to the repository root for reproducible execution.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def resolve_project_path(path: str | Path) -> Path:
     """
-    Resolve a configured path relative to the project root.
+    Resolve configured paths relative to the project root.
 
-    Absolute paths are preserved.
-    Relative paths are interpreted relative to the repository root.
+    Absolute paths are preserved; relative paths are resolved from the
+    repository root.
     """
     path = Path(path)
 
@@ -27,7 +28,7 @@ def resolve_project_path(path: str | Path) -> Path:
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
-    """Load YAML configuration."""
+    """Load YAML configuration from a resolved project path."""
     path = resolve_project_path(path)
 
     if not path.exists():
@@ -39,15 +40,28 @@ def load_config(path: str | Path) -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def ensure_output_dirs(config: dict[str, Any]) -> None:
-    """Create all output directories."""
-    for key in ("figures", "tables", "metrics"):
-        path = resolve_project_path(config["output"][key])
-        path.mkdir(parents=True, exist_ok=True)
+def ensure_output_dirs(
+    config: dict[str, Any],
+) -> None:
+    """Create configured output directories if they do not exist."""
+    for key in (
+        "figures",
+        "tables",
+        "metrics",
+    ):
+        path = resolve_project_path(
+            config["output"][key]
+        )
+        path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
 
-def load_raw_csv(path: str | Path) -> pd.DataFrame:
-    """Load the raw telemetry CSV."""
+def load_raw_csv(
+    path: str | Path,
+) -> pd.DataFrame:
+    """Load the raw cellular telemetry dataset."""
     path = resolve_project_path(path)
 
     if not path.exists():
@@ -56,15 +70,20 @@ def load_raw_csv(path: str | Path) -> pd.DataFrame:
             "Place webbrowsing.csv in the repository data/ directory."
         )
 
-    print(f"Reading dataset: {path}")
+    print(
+        f"Reading dataset: {path}"
+    )
 
+    # Disable chunk-wise type inference for consistent schema handling.
     return pd.read_csv(
         path,
         low_memory=False,
     )
 
 
-def load_cleaned_parquet(path: str | Path) -> pd.DataFrame:
+def load_cleaned_parquet(
+    path: str | Path,
+) -> pd.DataFrame:
     """Load the cleaned Parquet dataset."""
     path = resolve_project_path(path)
 
@@ -74,28 +93,45 @@ def load_cleaned_parquet(path: str | Path) -> pd.DataFrame:
             "Run scripts/run_all.py first."
         )
 
-    return pd.read_parquet(path)
+    return pd.read_parquet(
+        path
+    )
 
 
 def save_dataframe(
     df: pd.DataFrame,
     path: str | Path,
 ) -> None:
-    """Save a DataFrame as Parquet."""
+    """Persist a DataFrame as a Parquet dataset."""
     path = resolve_project_path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(path, index=False)
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    df.to_parquet(
+        path,
+        index=False,
+    )
 
 
 def save_json(
     payload: dict[str, Any],
     path: str | Path,
 ) -> None:
-    """Save JSON metrics."""
+    """Persist metrics or metadata as JSON."""
     path = resolve_project_path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
 
-    with path.open("w", encoding="utf-8") as f:
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    with path.open(
+        "w",
+        encoding="utf-8",
+    ) as f:
         json.dump(
             payload,
             f,
@@ -108,9 +144,14 @@ def save_csv(
     df: pd.DataFrame,
     path: str | Path,
 ) -> None:
-    """Save CSV results."""
+    """Persist tabular analysis results as CSV."""
     path = resolve_project_path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
     df.to_csv(
         path,
         index=False,
