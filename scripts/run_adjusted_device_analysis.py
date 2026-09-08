@@ -6,6 +6,7 @@ import sys
 
 import pandas as pd
 
+# Make repository-level src imports available when running this script directly.
 sys.path.append(
     str(
         Path(__file__)
@@ -54,6 +55,7 @@ def main() -> None:
         config
     )
 
+    # Reuse the cleaned Parquet artifact produced by the shared preprocessing pipeline.
     df = load_cleaned_parquet(
         config["data"][
             "cleaned_parquet_path"
@@ -64,6 +66,8 @@ def main() -> None:
         "device_analysis"
     ]
 
+    # Apply the predefined workload and operating-condition restrictions
+    # before estimating device-model associations.
     clean_room = create_device_subset(
         df,
         reference_url=da[
@@ -88,9 +92,11 @@ def main() -> None:
         "reference_network"
     ]
 
-    # ========================================================
+    # ------------------------------------------------------------------
     # Cell-overlap diagnostics
-    # ========================================================
+    # ------------------------------------------------------------------
+    # Quantify whether the restricted dataset supports meaningful
+    # within-cell comparisons across multiple device models.
     overlap = overlap_summary(
         clean_room
     )
@@ -105,9 +111,9 @@ def main() -> None:
         / "device_cell_overlap.json",
     )
 
-    # ========================================================
+    # ------------------------------------------------------------------
     # Primary cell fixed-effects model
-    # ========================================================
+    # ------------------------------------------------------------------
     print(
         "\nFitting primary cell fixed-effects model..."
     )
@@ -132,9 +138,9 @@ def main() -> None:
         analysis_label="All represented cells",
     )
 
-    # ========================================================
+    # ------------------------------------------------------------------
     # Within-cell robustness model
-    # ========================================================
+    # ------------------------------------------------------------------
     print(
         "\nFitting within-cell robustness model..."
     )
@@ -159,9 +165,10 @@ def main() -> None:
         analysis_label="Multi-device cells only",
     )
 
-    # ========================================================
-    # Save coefficients
-    # ========================================================
+    # ------------------------------------------------------------------
+    # Save coefficients and model summaries
+    # ------------------------------------------------------------------
+    # Keep primary and robustness estimates together for direct comparison.
     combined_effects = pd.concat(
         [
             effects_all,
@@ -217,9 +224,9 @@ def main() -> None:
         / "within_cell_device_model.json",
     )
 
-    # ========================================================
+    # ------------------------------------------------------------------
     # Plot primary adjusted effects
-    # ========================================================
+    # ------------------------------------------------------------------
     plot_adjusted_device_effects(
         effects_all,
         Path(
@@ -230,9 +237,11 @@ def main() -> None:
         / "04_adjusted_device_effects",
     )
 
-    # ========================================================
+    # ------------------------------------------------------------------
     # Human-readable coefficient summaries
-    # ========================================================
+    # ------------------------------------------------------------------
+    # Report compact model metadata rather than relying on the full
+    # statsmodels summary, which can become unwieldy with many fixed effects.
     for result, filename, title in [
         (
             result_all,
@@ -262,10 +271,14 @@ def main() -> None:
                 title
                 + "\n"
             )
+
             f.write(
                 "=" * len(title)
                 + "\n\n"
             )
+
+            # Avoid treating large fixed-effect joint tests as the
+            # primary inferential output when the design is rank-deficient.
             f.write(
                 "The full statsmodels summary is intentionally "
                 "not used as the primary reported result because "
@@ -293,6 +306,7 @@ def main() -> None:
     print(
         "\nDevice/cell overlap:"
     )
+
     print(
         overlap
     )
@@ -300,6 +314,7 @@ def main() -> None:
     print(
         "\nPrimary model:"
     )
+
     print(
         summary_all
     )
@@ -307,6 +322,7 @@ def main() -> None:
     print(
         "\nWithin-cell robustness model:"
     )
+
     print(
         summary_multi
     )
@@ -314,6 +330,7 @@ def main() -> None:
     print(
         "\nPrimary adjusted effects:"
     )
+
     print(
         effects_all.to_string(
             index=False
@@ -323,6 +340,7 @@ def main() -> None:
     print(
         "\nWithin-cell adjusted effects:"
     )
+
     print(
         effects_multi.to_string(
             index=False
