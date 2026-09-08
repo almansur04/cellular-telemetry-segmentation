@@ -1,4 +1,4 @@
-# Python
+# Python cache and virtual environments
 __pycache__/
 *.py[cod]
 *.so
@@ -7,25 +7,25 @@ __pycache__/
 venv/
 env/
 
-# IDE / OS
+# IDE and operating-system files
 .vscode/
 .idea/
 .DS_Store
 
-# Local data
+# Local datasets excluded from version control
 data/*.csv
 data/*.csv.gz
 data/*.parquet
 data/*.feather
 data/*.xlsx
 
-# Generated results
+# Generated analysis artifacts
 results/figures/*.png
 results/figures/*.pdf
 results/tables/*.csv
 results/metrics/*.json
 results/metrics/*.txt
 
-# Temporary files
+# Runtime and temporary files
 *.log
 *.tmp
