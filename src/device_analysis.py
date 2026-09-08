@@ -17,12 +17,16 @@ def create_device_subset(
 ) -> pd.DataFrame:
     """
     Construct the restricted device-comparison regime.
+
+    Restricting workload, network conditions, signal strength, and
+    completed speed tests reduces measurement heterogeneity before
+    comparing device-model distributions.
     """
     subset = df[
         (df["url"] == reference_url)
         & (
             df["network_type"].isin(
-                allowed_networks
+                allowed_networks,
             )
         )
         & (
@@ -45,7 +49,7 @@ def create_device_subset(
 
     subset = subset[
         subset["device_model"].isin(
-            valid_devices
+            valid_devices,
         )
     ].copy()
 
@@ -55,21 +59,19 @@ def create_device_subset(
 def kruskal_wallis_result(
     df: pd.DataFrame,
 ) -> dict[str, float]:
-    """Run the omnibus Kruskal-Wallis test."""
-
+    """Run the omnibus Kruskal-Wallis test across device models."""
     groups = [
         group[
             "page_download_speed"
         ].to_numpy()
-        for _, group
-        in df.groupby(
+        for _, group in df.groupby(
             "device_model",
             observed=True,
         )
     ]
 
     statistic, p_value = stats.kruskal(
-        *groups
+        *groups,
     )
 
     n = len(df)
@@ -85,7 +87,7 @@ def kruskal_wallis_result(
         "H": float(statistic),
         "p_value": float(p_value),
         "epsilon_squared": float(
-            epsilon_squared
+            epsilon_squared,
         ),
     }
 
@@ -93,7 +95,7 @@ def kruskal_wallis_result(
 def dunn_test(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Pairwise Dunn test with Bonferroni correction."""
+    """Run pairwise Dunn tests with Bonferroni correction."""
     return sp.posthoc_dunn(
         df,
         val_col="page_download_speed",
@@ -109,8 +111,7 @@ def cliffs_delta(
     """
     Compute Cliff's delta.
 
-    Positive values indicate that x tends
-    to exceed y.
+    Positive values indicate that x tends to exceed y.
     """
     x = np.asarray(x)
     y = np.asarray(y)
@@ -118,12 +119,13 @@ def cliffs_delta(
     greater = 0
     less = 0
 
+    # Count all cross-group directional comparisons.
     for value in x:
         greater += np.sum(
-            value > y
+            value > y,
         )
         less += np.sum(
-            value < y
+            value < y,
         )
 
     denominator = (
@@ -138,14 +140,12 @@ def cliffs_delta(
 def pairwise_effect_sizes(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Compute pairwise Cliff's delta."""
-
+    """Compute pairwise Cliff's delta across device models."""
     groups = {
         name: group[
             "page_download_speed"
         ].to_numpy()
-        for name, group
-        in df.groupby(
+        for name, group in df.groupby(
             "device_model",
             observed=True,
         )
@@ -168,7 +168,7 @@ def pairwise_effect_sizes(
                 "device_b": device_b,
                 "cliffs_delta": delta,
                 "absolute_cliffs_delta": abs(
-                    delta
+                    delta,
                 ),
             }
         )
@@ -179,8 +179,7 @@ def pairwise_effect_sizes(
 def device_summary(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Median, quartiles, IQR and sample size by device."""
-
+    """Compute median, quartiles, IQR, and sample size by device model."""
     result = (
         df.groupby(
             "device_model",
@@ -222,7 +221,9 @@ def device_summary(
             "median_speed_mbps",
             ascending=False,
         )
-        .reset_index(drop=True)
+        .reset_index(
+            drop=True,
+        )
     )
 
 
@@ -232,19 +233,19 @@ def bootstrap_median_ci(
     confidence: float = 0.95,
     random_state: int = 42,
 ) -> tuple[float, float]:
-    """Percentile-bootstrap confidence interval for a median."""
-
+    """Compute a percentile-bootstrap confidence interval for the median."""
     rng = np.random.default_rng(
-        random_state
+        random_state,
     )
 
     values = np.asarray(values)
     sample_size = len(values)
 
     medians = np.empty(
-        iterations
+        iterations,
     )
 
+    # Resample observations with replacement to estimate median uncertainty.
     for i in range(iterations):
         sample = rng.choice(
             values,
@@ -253,7 +254,7 @@ def bootstrap_median_ci(
         )
 
         medians[i] = np.median(
-            sample
+            sample,
         )
 
     alpha = (
@@ -282,23 +283,20 @@ def device_median_confidence_intervals(
     confidence: float = 0.95,
     random_state: int = 42,
 ) -> pd.DataFrame:
-    """Bootstrap 95% CIs for device medians."""
-
+    """Compute bootstrap confidence intervals for device-model medians."""
     rows = []
 
     for device, group in df.groupby(
         "device_model",
         observed=True,
     ):
-        low, high = (
-            bootstrap_median_ci(
-                group[
-                    "page_download_speed"
-                ].to_numpy(),
-                iterations=iterations,
-                confidence=confidence,
-                random_state=random_state,
-            )
+        low, high = bootstrap_median_ci(
+            group[
+                "page_download_speed"
+            ].to_numpy(),
+            iterations=iterations,
+            confidence=confidence,
+            random_state=random_state,
         )
 
         rows.append(
@@ -321,5 +319,7 @@ def device_median_confidence_intervals(
             "median_mbps",
             ascending=False,
         )
-        .reset_index(drop=True)
+        .reset_index(
+            drop=True,
+        )
     )
