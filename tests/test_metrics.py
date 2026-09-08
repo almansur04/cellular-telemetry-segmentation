@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from src.cell_analysis import (
+    add_session_failures,
     aggregate_cells,
     jaccard_similarity,
     wilson_interval,
@@ -10,40 +11,25 @@ from src.device_analysis import cliffs_delta
 
 
 def test_cliffs_delta_identical_groups():
-    x = np.array(
-        [1, 2, 3]
-    )
+    """Verify identical samples produce a near-zero effect size."""
+    x = np.array([1, 2, 3])
+    y = np.array([1, 2, 3])
 
-    y = np.array(
-        [1, 2, 3]
-    )
-
-    assert (
-        abs(
-            cliffs_delta(
-                x,
-                y,
-            )
-        )
-        < 1e-12
-    )
+    assert abs(cliffs_delta(x, y)) < 1e-12
 
 
 def test_wilson_interval_is_bounded():
+    """Ensure the Wilson confidence interval remains within [0, 1]."""
     low, high = wilson_interval(
         failures=5,
         total=100,
     )
 
-    assert (
-        0
-        <= low
-        <= high
-        <= 1
-    )
+    assert 0 <= low <= high <= 1
 
 
 def test_aggregate_cells_threshold():
+    """Verify cell aggregation respects minimum-session and failure thresholds."""
     df = pd.DataFrame(
         {
             "cell_id": [
@@ -88,39 +74,22 @@ def test_aggregate_cells_threshold():
     )
 
     assert len(result) == 2
-
-    assert (
-        result[
-            "quality_failures"
-        ].sum()
-        == 5
-    )
+    assert result["quality_failures"].sum() == 5
 
 
 def test_jaccard_similarity():
-    a = {
-        1,
-        2,
-        3,
-    }
-
-    b = {
-        2,
-        3,
-        4,
-    }
+    """Verify Jaccard similarity matches the expected set overlap."""
+    a = {1, 2, 3}
+    b = {2, 3, 4}
 
     assert np.isclose(
-        jaccard_similarity(
-            a,
-            b,
-        ),
+        jaccard_similarity(a, b),
         2 / 4,
     )
 
-def test_wilson_interval_zero_failures():
-    from src.cell_analysis import wilson_interval
 
+def test_wilson_interval_zero_failures():
+    """Check the lower bound reaches zero while the upper bound remains positive."""
     low, high = wilson_interval(
         failures=0,
         total=100,
@@ -131,16 +100,11 @@ def test_wilson_interval_zero_failures():
         0.0,
         atol=1e-12,
     )
-
     assert 0.0 < high < 0.10
 
 
 def test_cell_classification_changes_with_rsrp_threshold():
-    from src.cell_analysis import (
-        add_session_failures,
-        aggregate_cells,
-    )
-
+    """Verify RSRP thresholding separates coverage and capacity candidates."""
     df = pd.DataFrame(
         {
             "cell_id": [1, 1, 2, 2],
@@ -201,12 +165,5 @@ def test_cell_classification_changes_with_rsrp_threshold():
         )
     )
 
-    assert (
-        classes[1]
-        == "Capacity/congestion candidate"
-    )
-
-    assert (
-        classes[2]
-        == "Coverage candidate"
-    )
+    assert classes[1] == "Capacity/congestion candidate"
+    assert classes[2] == "Coverage candidate"
