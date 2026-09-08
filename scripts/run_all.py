@@ -4,6 +4,9 @@ import argparse
 from pathlib import Path
 import sys
 
+import pandas as pd
+
+# Make repository-level src imports available when running this script directly.
 sys.path.append(
     str(
         Path(__file__)
@@ -64,6 +67,7 @@ def main() -> None:
         f"Loading raw data from: {raw_path}"
     )
 
+    # Load the immutable raw artifact before any transformations are applied.
     df = load_raw_csv(
         raw_path
     )
@@ -72,14 +76,17 @@ def main() -> None:
         f"Raw shape: {df.shape}"
     )
 
+    # Normalize timestamps, identifiers, sentinel values, and derived flags.
     cleaned = parse_and_clean(
         df
     )
 
+    # Reduce memory usage while preserving the analytical schema.
     cleaned = optimize_dtypes(
         cleaned
     )
 
+    # Capture structural checks before writing the reproducible cleaned artifact.
     integrity = validate_dataset(
         cleaned
     )
@@ -87,6 +94,7 @@ def main() -> None:
     print(
         "\nDataset integrity:"
     )
+
     print(
         integrity
     )
@@ -98,6 +106,7 @@ def main() -> None:
         ],
     )
 
+    # Generate baseline dataset and workload summaries used by downstream analyses.
     summary = dataset_summary(
         cleaned
     )
@@ -130,6 +139,7 @@ def main() -> None:
         cleaned
     )
 
+    # Persist exploratory tables as stable downstream analysis artifacts.
     save_csv(
         urls,
         Path(
@@ -170,15 +180,18 @@ def main() -> None:
         / "weekday_summary.csv",
     )
 
-    corr.to_csv(
+    save_csv(
+        corr,
         Path(
             config["output"][
                 "tables"
             ]
         )
-        / "correlations.csv"
+        / "correlations.csv",
     )
 
+    # Generate the figures used to document the analytical workflow and
+    # quantify baseline workload heterogeneity.
     plot_framework(
         Path(
             config["output"][
