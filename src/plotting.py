@@ -9,8 +9,7 @@ import pandas as pd
 
 
 def setup_publication_style() -> None:
-    """Set restrained publication-style plotting defaults."""
-
+    """Set restrained defaults for publication-ready figures."""
     mpl.rcParams.update(
         {
             "font.family": "DejaVu Sans",
@@ -35,13 +34,14 @@ def save_figure(
     fig: plt.Figure,
     path: str | Path,
 ) -> None:
-    """Save PDF and PNG copies."""
+    """Save PDF and PNG copies of a figure."""
     path = Path(path)
     path.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
+    # Export both vector-friendly and raster copies for reuse in papers.
     fig.savefig(
         path.with_suffix(".pdf"),
         bbox_inches="tight",
@@ -60,7 +60,7 @@ def save_figure(
 def plot_framework(
     path: str | Path,
 ) -> None:
-    """Draw the research workflow."""
+    """Draw the end-to-end research workflow."""
     setup_publication_style()
 
     fig, ax = plt.subplots(
@@ -155,7 +155,7 @@ def plot_url_performance(
     url_stats: pd.DataFrame,
     path: str | Path,
 ) -> None:
-    """Plot workload heterogeneity."""
+    """Plot workload heterogeneity across web resources."""
     setup_publication_style()
 
     data = (
@@ -231,9 +231,10 @@ def plot_device_boxplot(
     clean_room: pd.DataFrame,
     path: str | Path,
 ) -> None:
-    """Plot device-model distributions."""
+    """Plot device-model throughput distributions."""
     setup_publication_style()
 
+    # Rank models by median throughput for a consistent visual ordering.
     ordered = (
         clean_room
         .groupby(
@@ -326,8 +327,7 @@ def plot_dunn_heatmap(
     dunn_matrix: pd.DataFrame,
     path: str | Path,
 ) -> None:
-    """Plot lower-triangular Dunn-test evidence."""
-
+    """Plot lower-triangular evidence from pairwise Dunn tests."""
     setup_publication_style()
 
     matrix = (
@@ -336,6 +336,7 @@ def plot_dunn_heatmap(
         .copy()
     )
 
+    # Transform adjusted p-values so smaller values become visually stronger.
     values = -np.log10(
         np.clip(
             matrix,
@@ -344,6 +345,7 @@ def plot_dunn_heatmap(
         )
     )
 
+    # Display each pairwise comparison only once.
     mask = np.triu(
         np.ones_like(
             values,
@@ -446,6 +448,7 @@ def plot_adjusted_device_effects(
     """
     setup_publication_style()
 
+    # Exclude the reference model so only estimated contrasts are plotted.
     data = effects[
         effects[
             "device_model"
@@ -549,8 +552,7 @@ def plot_cell_pareto(
     path: str | Path,
     top_n: int = 50,
 ) -> None:
-    """Plot failure concentration among highest-impact cells."""
-
+    """Plot failure concentration among the highest-impact cells."""
     setup_publication_style()
 
     data = (
@@ -574,6 +576,7 @@ def plot_cell_pareto(
         ].sum()
     )
 
+    # Convert ranked failure counts into cumulative observed impact.
     data["cum_share"] = (
         data[
             "quality_failures"
@@ -647,8 +650,7 @@ def plot_impact_vs_severity(
     cell_stats: pd.DataFrame,
     path: str | Path,
 ) -> None:
-    """Separate failure severity from observed impact volume."""
-
+    """Plot failure severity against observed impact volume."""
     setup_publication_style()
 
     fig, ax = plt.subplots(
@@ -662,6 +664,7 @@ def plot_impact_vs_severity(
         < 0.05
     )
 
+    # Separate cells below and above the operational failure threshold.
     ax.scatter(
         cell_stats.loc[
             below,
@@ -734,7 +737,6 @@ def plot_ml_importance(
     path: str | Path,
 ) -> None:
     """Plot grouped held-out permutation importance."""
-
     setup_publication_style()
 
     data = (
@@ -789,8 +791,7 @@ def plot_threshold_sensitivity(
     path: str | Path,
 ) -> None:
     """
-    Plot stability of the top-50 cell set under
-    one-at-a-time threshold changes.
+    Plot top-50 cell-ranking stability under threshold changes.
     """
     setup_publication_style()
 
@@ -821,6 +822,7 @@ def plot_threshold_sensitivity(
         color="0.15",
     )
 
+    # A Jaccard score of 1.0 represents an unchanged top-50 ranking.
     ax.axhline(
         1.0,
         linestyle="--",
