@@ -21,13 +21,13 @@ def build_preprocessor(
     categorical: list[str],
     numeric: list[str],
 ) -> ColumnTransformer:
-    """Build one-hot categorical + numeric preprocessing."""
+    """Build categorical one-hot encoding with passthrough numeric features."""
     return ColumnTransformer(
         transformers=[
             (
                 "categorical",
                 OneHotEncoder(
-                    handle_unknown="ignore"
+                    handle_unknown="ignore",
                 ),
                 categorical,
             ),
@@ -36,7 +36,7 @@ def build_preprocessor(
                 "passthrough",
                 numeric,
             ),
-        ]
+        ],
     )
 
 
@@ -46,8 +46,7 @@ def build_rf_model(
     min_samples_leaf: int = 2,
     random_state: int = 42,
 ) -> Pipeline:
-    """Random Forest regression model."""
-
+    """Build a Random Forest regression pipeline."""
     categorical = [
         "network_type",
         "device_model_code",
@@ -79,15 +78,14 @@ def build_rf_model(
         [
             ("preprocess", transformer),
             ("model", model),
-        ]
+        ],
     )
 
 
 def build_ridge_model(
     alpha: float = 1.0,
 ) -> Pipeline:
-    """Simple regularized linear baseline."""
-
+    """Build a regularized linear regression baseline."""
     categorical = [
         "network_type",
         "device_model_code",
@@ -108,14 +106,14 @@ def build_ridge_model(
     )
 
     model = Ridge(
-        alpha=alpha
+        alpha=alpha,
     )
 
     return Pipeline(
         [
             ("preprocess", transformer),
             ("model", model),
-        ]
+        ],
     )
 
 
@@ -124,19 +122,20 @@ def temporal_split(
     timestamp_col: str = "test_time",
     test_fraction: float = 0.20,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Chronological 80/20 split."""
+    """Split observations chronologically into training and test sets."""
+    # Preserve temporal ordering to avoid future observations leaking into training.
     ordered = (
         df.sort_values(
-            timestamp_col
+            timestamp_col,
         )
         .reset_index(
-            drop=True
+            drop=True,
         )
     )
 
     split_index = int(
         len(ordered)
-        * (1.0 - test_fraction)
+        * (1.0 - test_fraction),
     )
 
     return (
@@ -154,14 +153,14 @@ def random_split(
     test_fraction: float = 0.20,
     random_state: int = 42,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Random train/test split."""
+    """Create a reproducible random train/test split."""
     test = df.sample(
         frac=test_fraction,
         random_state=random_state,
     )
 
     train = df.drop(
-        index=test.index
+        index=test.index,
     )
 
     return (
@@ -177,8 +176,7 @@ def evaluate_model(
     feature_columns: list[str],
     target_column: str = "page_download_speed",
 ) -> dict[str, float]:
-    """Fit and evaluate a regression model."""
-
+    """Fit a regression model and evaluate held-out predictions."""
     X_train = train[
         feature_columns
     ]
@@ -201,7 +199,7 @@ def evaluate_model(
     )
 
     prediction = model.predict(
-        X_test
+        X_test,
     )
 
     return {
@@ -239,18 +237,18 @@ def bootstrap_metric_ci(
     """
     Bootstrap a regression metric on held-out predictions.
 
-    This treats held-out observations as the resampling unit.
+    Each held-out observation is treated as an independent resampling unit.
     """
     rng = np.random.default_rng(
-        random_state
+        random_state,
     )
 
     y_true = np.asarray(
-        y_true
+        y_true,
     )
 
     y_pred = np.asarray(
-        y_pred
+        y_pred,
     )
 
     n = len(y_true)
@@ -294,7 +292,9 @@ def bootstrap_metric_ci(
                 f"Unknown metric: {metric}"
             )
 
-        values.append(value)
+        values.append(
+            value
+        )
 
     alpha = (
         1 - confidence
@@ -326,7 +326,7 @@ def evaluate_model_with_ci(
     confidence: float = 0.95,
     random_state: int = 42,
 ) -> dict[str, Any]:
-    """Evaluate model and bootstrap CIs."""
+    """Evaluate held-out predictions and estimate bootstrap confidence intervals."""
     X_train = train[
         feature_columns
     ]
@@ -380,15 +380,13 @@ def evaluate_model_with_ci(
         "mae",
         "rmse",
     ):
-        low, high = (
-            bootstrap_metric_ci(
-                y_test,
-                prediction,
-                metric=metric,
-                iterations=iterations,
-                confidence=confidence,
-                random_state=random_state,
-            )
+        low, high = bootstrap_metric_ci(
+            y_test,
+            prediction,
+            metric=metric,
+            iterations=iterations,
+            confidence=confidence,
+            random_state=random_state,
         )
 
         metrics[
@@ -411,12 +409,12 @@ def grouped_permutation_importance(
     random_state: int = 42,
 ) -> pd.DataFrame:
     """
-    Held-out permutation importance on original telemetry fields.
+    Compute held-out permutation importance for original telemetry fields.
 
-    Importance is the decrease in R² caused by permutation.
+    Importance is measured as the decrease in R² after permutation.
     """
     rng = np.random.default_rng(
-        random_state
+        random_state,
     )
 
     X = test[
@@ -427,8 +425,8 @@ def grouped_permutation_importance(
         target_column
     ].to_numpy()
 
-    baseline_prediction = (
-        model.predict(X)
+    baseline_prediction = model.predict(
+        X
     )
 
     baseline_r2 = r2_score(
@@ -450,6 +448,7 @@ def grouped_permutation_importance(
                 copy=True
             )
 
+            # Permute one original field while keeping all other features fixed.
             rng.shuffle(
                 values
             )
@@ -509,5 +508,7 @@ def grouped_permutation_importance(
             "r2_decrease",
             ascending=False,
         )
-        .reset_index(drop=True)
+        .reset_index(
+            drop=True,
+        )
     )
