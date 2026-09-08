@@ -6,6 +6,7 @@ import sys
 
 import pandas as pd
 
+# Make repository-level src imports available when running this script directly.
 sys.path.append(
     str(
         Path(__file__)
@@ -46,6 +47,7 @@ def main() -> None:
         config
     )
 
+    # Use the cleaned Parquet artifact produced by the main analysis pipeline.
     df = load_cleaned_parquet(
         config["data"][
             "cleaned_parquet_path"
@@ -60,6 +62,8 @@ def main() -> None:
         "sensitivity"
     ]
 
+    # Evaluate one threshold family at a time while holding all other
+    # cell-analysis parameters at their configured baseline values.
     scenarios = [
         (
             "latency",
@@ -90,7 +94,6 @@ def main() -> None:
     all_results = []
 
     for parameter, values in scenarios:
-
         print(
             f"\nSensitivity analysis: {parameter}"
         )
@@ -133,6 +136,7 @@ def main() -> None:
             f"sensitivity_{parameter}.csv"
         )
 
+        # Persist parameter-specific results alongside the corresponding figure.
         save_csv(
             result,
             Path(
@@ -159,6 +163,7 @@ def main() -> None:
             )
         )
 
+    # Combine all one-at-a-time sensitivity runs into a single analysis artifact.
     combined = pd.concat(
         all_results,
         ignore_index=True,
