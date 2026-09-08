@@ -8,8 +8,8 @@ import pandas as pd
 def summarize_urls(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Compute descriptive performance by web resource."""
-    result = (
+    """Compute descriptive performance statistics by web resource."""
+    return (
         df.groupby(
             "url",
             observed=True,
@@ -41,8 +41,6 @@ def summarize_urls(
             ascending=False,
         )
     )
-
-    return result
 
 
 def summarize_network_types(
@@ -85,6 +83,8 @@ def summarize_temporal_patterns(
 ]:
     """Compute hourly and weekday throughput summaries."""
 
+    # Keep temporal summaries separate so downstream plots can compare
+    # intraday and weekday effects without recomputing grouped statistics.
     hourly = (
         df.groupby(
             "hour",
@@ -129,7 +129,7 @@ def summarize_temporal_patterns(
 def dataset_summary(
     df: pd.DataFrame,
 ) -> dict[str, Any]:
-    """Generate a compact dataset summary."""
+    """Generate a compact summary of dataset structure and integrity."""
     response_counts = (
         df["response_flag"]
         .value_counts(dropna=False)
@@ -146,24 +146,24 @@ def dataset_summary(
         "rows": int(len(df)),
         "columns": int(len(df.columns)),
         "duplicate_rows": int(
-            df.duplicated().sum()
+            df.duplicated().sum(),
         ),
         "device_models": int(
-            df["device_model"].nunique()
+            df["device_model"].nunique(),
         ),
         "network_types": int(
-            df["network_type"].nunique()
+            df["network_type"].nunique(),
         ),
         "urls": int(
-            df["url"].nunique()
+            df["url"].nunique(),
         ),
         "unique_device_ids": int(
-            df["device_id"].nunique()
+            df["device_id"].nunique(),
         ),
         "unique_cells": int(
             df["cell_id"].nunique(
-                dropna=True
-            )
+                dropna=True,
+            ),
         ),
         "response_counts": {
             str(k): int(v)
@@ -179,7 +179,7 @@ def dataset_summary(
 def correlations(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Return exploratory Pearson correlations."""
+    """Return exploratory Pearson correlations for available numeric fields."""
     columns = [
         "signal_strength",
         "page_response_latency",
@@ -192,9 +192,10 @@ def correlations(
     ]
 
     columns = [
-        c
-        for c in columns
-        if c in df.columns
+        column
+        for column in columns
+        if column in df.columns
     ]
 
+    # Restrict the matrix to telemetry variables available in the current schema.
     return df[columns].corr()
