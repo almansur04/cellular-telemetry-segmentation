@@ -11,16 +11,16 @@ def prepare_adjusted_dataset(
     """
     Prepare the restricted device-analysis dataset.
 
-    Required controls:
-      - device model
-      - reported signal strength
-      - network type
-      - hour
-      - day of week
-      - serving cell
+    Controls:
+        - device model
+        - reported signal strength
+        - network type
+        - hour
+        - day of week
+        - serving cell
 
     Response:
-      log1p(page_download_speed)
+        log1p(page_download_speed)
     """
     required = [
         "page_download_speed",
@@ -62,6 +62,8 @@ def prepare_adjusted_dataset(
         .astype(str)
     )
 
+    # Stabilize the response scale for a throughput distribution with
+    # potentially large values and reduce sensitivity to extreme observations.
     data["log_download_speed"] = np.log1p(
         data["page_download_speed"]
     )
@@ -111,6 +113,8 @@ def _fit_fixed_effects(
         data=data,
     )
 
+    # Cluster covariance by serving cell to account for within-cell
+    # dependence among repeated telemetry observations.
     result = model.fit(
         cov_type="cluster",
         cov_kwds={
@@ -127,7 +131,7 @@ def fit_cell_fixed_effects_model(
     reference_network: str = "5G",
 ):
     """
-    Primary adjusted model.
+    Fit the primary adjusted device-model specification.
 
     All represented serving cells are retained.
     """
@@ -169,8 +173,7 @@ def prepare_within_cell_dataset(
     multi_device_cells = (
         device_counts[
             device_counts >= 2
-        ]
-        .index
+        ].index
     )
 
     return data[
@@ -186,8 +189,8 @@ def fit_within_cell_model(
     reference_network: str = "5G",
 ):
     """
-    Robustness model restricted to cells containing at least two
-    device models.
+    Fit the robustness specification using cells with multiple
+    observed device models.
     """
     data = prepare_within_cell_dataset(
         clean_room
@@ -210,7 +213,7 @@ def extract_device_effects(
     """
     Extract device-specific coefficients and 95% clustered CIs.
 
-    Coefficients are on the log1p throughput scale.
+    Coefficients are reported on the log1p throughput scale.
     """
     rows = []
 
@@ -257,8 +260,8 @@ def extract_device_effects(
             .strip('"')
         )
 
-        # This is a descriptive transformed-scale quantity,
-        # not a causal percentage effect.
+        # Report the transformed coefficient as an association on the
+        # original throughput scale; avoid presenting it as causal attribution.
         relative_change_pct = (
             100
             * (
@@ -279,14 +282,14 @@ def extract_device_effects(
                 "p_value": p_value,
                 "ci_low_log1p": ci_low,
                 "ci_high_log1p": ci_high,
-                "approx_relative_change_pct": (
-                    float(
-                        relative_change_pct
-                    )
+                "approx_relative_change_pct": float(
+                    relative_change_pct
                 ),
             }
         )
 
+    # Explicitly materialize the reference level because it is absorbed
+    # into the intercept and therefore has no standalone coefficient.
     reference_row = pd.DataFrame(
         [
             {
@@ -317,7 +320,9 @@ def extract_device_effects(
             "coefficient_log1p",
             ascending=True,
         )
-        .reset_index(drop=True)
+        .reset_index(
+            drop=True,
+        )
     )
 
 
@@ -326,7 +331,7 @@ def model_summary(
     data: pd.DataFrame,
     analysis_label: str,
 ) -> dict:
-    """Return compact model metadata."""
+    """Return compact metadata for a fitted adjusted model."""
     return {
         "analysis": analysis_label,
         "observations": int(
@@ -350,7 +355,7 @@ def model_summary(
 def overlap_summary(
     clean_room: pd.DataFrame,
 ) -> dict:
-    """Summarize cell/device overlap."""
+    """Summarize device-model overlap across serving cells."""
     data = prepare_adjusted_dataset(
         clean_room
     )
@@ -375,9 +380,7 @@ def overlap_summary(
         "represented_cells": int(
             total_cells
         ),
-        "multi_device_cells": (
-            multi_device_cells
-        ),
+        "multi_device_cells": multi_device_cells,
         "multi_device_cell_share": (
             multi_device_cells
             / total_cells
