@@ -6,6 +6,7 @@ import sys
 
 import pandas as pd
 
+# Make repository-level src imports available when running this script directly.
 sys.path.append(
     str(
         Path(__file__).resolve().parents[1]
@@ -41,6 +42,7 @@ def main() -> None:
         config
     )
 
+    # Reuse the cleaned dataset produced by the shared preprocessing pipeline.
     df = load_cleaned_parquet(
         config["data"][
             "cleaned_parquet_path"
@@ -67,9 +69,10 @@ def main() -> None:
         ],
     )
 
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
     # Device x Cell counts
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Build the cell-by-device matrix used to assess within-cell overlap.
     counts = pd.crosstab(
         clean_room["cell_id"],
         clean_room["device_model"],
@@ -85,7 +88,7 @@ def main() -> None:
         / "device_cell_counts.csv",
     )
 
-    # Number of distinct device models observed per cell.
+    # Number of distinct device models observed per serving cell.
     device_models_per_cell = (
         clean_room.groupby(
             "cell_id",
@@ -116,9 +119,10 @@ def main() -> None:
         / "cell_device_overlap_summary.csv",
     )
 
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
     # Device-pair co-occurrence
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Compare the sets of serving cells occupied by each device-model pair.
     devices = sorted(
         clean_room[
             "device_model"
@@ -191,7 +195,9 @@ def main() -> None:
                 False,
             ],
         )
-        .reset_index(drop=True)
+        .reset_index(
+            drop=True
+        )
     )
 
     save_csv(
@@ -204,9 +210,9 @@ def main() -> None:
         / "device_pair_cell_overlap.csv",
     )
 
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
     # Basic summary
-    # --------------------------------------------------------
+    # ------------------------------------------------------------------
     cells_total = len(
         device_models_per_cell
     )
