@@ -21,7 +21,7 @@ def parse_and_clean(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Clean raw telemetry without altering scientific measurements.
+    Normalize raw telemetry fields without modifying measurements.
     """
     out = df.copy()
 
@@ -31,14 +31,15 @@ def parse_and_clean(
             errors="coerce",
         )
 
+    # Remove sensitive identifiers before downstream analysis.
     for column in DROP_COLUMNS:
         if column in out.columns:
             out = out.drop(
-                columns=column
+                columns=column,
             )
 
-    # Preserve identifier columns as nullable integers rather than
-    # converting them to floating-point values after inserting NaN.
+    # Preserve network identifiers as nullable integers while normalizing
+    # known sentinel values to missing data.
     for column, invalid_values in INVALID_VALUES.items():
         if column not in out.columns:
             continue
@@ -85,12 +86,12 @@ def optimize_dtypes(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Reduce memory usage while preserving analytical meaning.
+    Reduce memory usage while preserving analytical semantics.
     """
     out = df.copy()
 
     integer_columns = out.select_dtypes(
-        include=["int64"]
+        include=["int64"],
     ).columns
 
     for column in integer_columns:
@@ -100,7 +101,7 @@ def optimize_dtypes(
         )
 
     float_columns = out.select_dtypes(
-        include=["float64"]
+        include=["float64"],
     ).columns
 
     for column in float_columns:
@@ -121,10 +122,11 @@ def optimize_dtypes(
         "app_version",
     ]
 
+    # Convert repeated string dimensions to categorical storage.
     for column in categorical_columns:
         if column in out.columns:
             out[column] = out[column].astype(
-                "category"
+                "category",
             )
 
     return out
@@ -138,37 +140,37 @@ def validate_dataset(
         "rows": int(len(df)),
         "columns": int(len(df.columns)),
         "duplicate_rows": int(
-            df.duplicated().sum()
+            df.duplicated().sum(),
         ),
         "missing_test_time": int(
-            df["test_time"].isna().sum()
+            df["test_time"].isna().sum(),
         )
         if "test_time" in df.columns
         else None,
         "device_models": int(
-            df["device_model"].nunique()
+            df["device_model"].nunique(),
         )
         if "device_model" in df.columns
         else None,
         "network_types": int(
-            df["network_type"].nunique()
+            df["network_type"].nunique(),
         )
         if "network_type" in df.columns
         else None,
         "urls": int(
-            df["url"].nunique()
+            df["url"].nunique(),
         )
         if "url" in df.columns
         else None,
         "unique_device_ids": int(
-            df["device_id"].nunique()
+            df["device_id"].nunique(),
         )
         if "device_id" in df.columns
         else None,
         "unique_cells": int(
             df["cell_id"].nunique(
-                dropna=True
-            )
+                dropna=True,
+            ),
         )
         if "cell_id" in df.columns
         else None,
