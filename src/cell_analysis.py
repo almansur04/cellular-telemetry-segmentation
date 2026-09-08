@@ -11,7 +11,6 @@ def add_session_failures(
     throughput_urls: list[str],
 ) -> pd.DataFrame:
     """Create deterministic session-level quality indicators."""
-
     out = df.copy()
 
     out["latency_failure"] = (
@@ -52,8 +51,7 @@ def wilson_interval(
     total: int,
     confidence: float = 0.95,
 ) -> tuple[float, float]:
-    """Wilson confidence interval for a binomial proportion."""
-
+    """Compute a Wilson confidence interval for a binomial proportion."""
     if total <= 0:
         return np.nan, np.nan
 
@@ -109,8 +107,7 @@ def aggregate_cells(
     coverage_rsrp_threshold_dbm: float,
     confidence: float = 0.95,
 ) -> pd.DataFrame:
-    """Aggregate session failures by cell."""
-
+    """Aggregate session-level quality indicators into cell-level triage metrics."""
     working = df.dropna(
         subset=[
             "cell_id",
@@ -140,6 +137,7 @@ def aggregate_cells(
         .reset_index()
     )
 
+    # Exclude low-volume cells whose failure rates are too unstable for triage.
     cell_stats = cell_stats[
         cell_stats[
             "total_sessions"
@@ -179,6 +177,8 @@ def aggregate_cells(
         for interval in intervals
     ]
 
+    # Require the entire lower confidence bound to clear the threshold
+    # before treating a cell as statistically above the operational baseline.
     cell_stats[
         "significantly_above_threshold"
     ] = (
@@ -198,6 +198,7 @@ def aggregate_cells(
     def classify(
         row: pd.Series,
     ) -> str:
+        """Assign a coverage or capacity-oriented operational triage class."""
         if (
             row["failure_rate"]
             < failure_rate_threshold
@@ -210,9 +211,7 @@ def aggregate_cells(
         ):
             return "Coverage candidate"
 
-        return (
-            "Capacity/congestion candidate"
-        )
+        return "Capacity/congestion candidate"
 
     cell_stats[
         "triage_class"
@@ -221,6 +220,7 @@ def aggregate_cells(
         axis=1,
     )
 
+    # Use observed failure count as the impact measure for operational ranking.
     cell_stats[
         "impact_count"
     ] = cell_stats[
@@ -239,7 +239,9 @@ def aggregate_cells(
                 False,
             ],
         )
-        .reset_index(drop=True)
+        .reset_index(
+            drop=True,
+        )
     )
 
 
@@ -247,8 +249,7 @@ def summarize_cell_results(
     cell_stats: pd.DataFrame,
     top_n: int = 50,
 ) -> dict:
-    """Summarize severity, impact and concentration."""
-
+    """Summarize cell severity, observed impact, and concentration."""
     active = len(
         cell_stats
     )
@@ -269,6 +270,7 @@ def summarize_cell_results(
         ].sum()
     )
 
+    # Quantify how much observed failure volume is concentrated in the top cells.
     top_failure_share = (
         float(
             top[
@@ -320,8 +322,7 @@ def summarize_cell_results(
 def impact_severity_table(
     cell_stats: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Separate impact and severity rankings."""
-
+    """Separate cell impact ranking from failure-rate severity ranking."""
     result = cell_stats[
         [
             "cell_id",
@@ -364,7 +365,7 @@ def impact_severity_table(
             "impact_rank"
         )
         .reset_index(
-            drop=True
+            drop=True,
         )
     )
 
@@ -373,11 +374,13 @@ def get_top_cells(
     cell_stats: pd.DataFrame,
     top_n: int,
 ) -> set:
-    """Return top-N cells by observed failure count."""
+    """Return the top-N cells ranked by observed failure count."""
     return set(
         cell_stats.head(
             top_n
-        )["cell_id"].tolist()
+        )[
+            "cell_id"
+        ].tolist()
     )
 
 
@@ -385,7 +388,7 @@ def jaccard_similarity(
     set_a: set,
     set_b: set,
 ) -> float:
-    """Compute Jaccard similarity."""
+    """Compute Jaccard similarity between two cell sets."""
     union = set_a | set_b
 
     if not union:
@@ -403,8 +406,8 @@ def classification_agreement(
     threshold: float,
 ) -> float:
     """
-    Compare coverage/capacity triage assignments on the same
-    cells that remain above the failure-rate threshold.
+    Compare coverage/capacity assignments among cells above the
+    same failure-rate threshold.
     """
     baseline_problematic = baseline[
         baseline["failure_rate"]
@@ -442,6 +445,7 @@ def classification_agreement(
         ]
     )
 
+    # Reduce the operational classification to coverage vs. non-coverage.
     baseline_binary = (
         baseline_class
         == "Coverage candidate"
@@ -453,8 +457,10 @@ def classification_agreement(
     )
 
     return float(
-        (baseline_binary == candidate_binary)
-        .mean()
+        (
+            baseline_binary
+            == candidate_binary
+        ).mean()
     )
 
 
@@ -472,45 +478,31 @@ def threshold_sensitivity(
     values: list[float],
 ) -> pd.DataFrame:
     """
-    One-at-a-time threshold sensitivity analysis.
+    Run one-at-a-time threshold sensitivity analysis.
 
-    The reported robustness quantity depends on the parameter:
+    Robustness is measured with the following parameter-specific quantities:
 
-      latency / throughput:
-          top-N Jaccard similarity
+    latency / throughput:
+        Top-N Jaccard similarity.
 
-      failure_rate:
-          number of cells above threshold and
-          number statistically above threshold
+    failure_rate:
+        Cells above threshold and cells statistically above threshold.
 
-      rsrp:
-          coverage/capacity classification agreement
+    rsrp:
+        Coverage/capacity classification agreement.
     """
-
-    baseline_session_df = (
-        add_session_failures(
-            df,
-            latency_failure_ms=(
-                base_latency_ms
-            ),
-            throughput_failure_mbps=(
-                base_throughput_mbps
-            ),
-            throughput_urls=(
-                throughput_urls
-            ),
-        )
+    baseline_session_df = add_session_failures(
+        df,
+        latency_failure_ms=base_latency_ms,
+        throughput_failure_mbps=base_throughput_mbps,
+        throughput_urls=throughput_urls,
     )
 
     baseline_cells = aggregate_cells(
         baseline_session_df,
         min_sessions=min_sessions,
-        failure_rate_threshold=(
-            base_failure_rate
-        ),
-        coverage_rsrp_threshold_dbm=(
-            base_rsrp_dbm
-        ),
+        failure_rate_threshold=base_failure_rate,
+        coverage_rsrp_threshold_dbm=base_rsrp_dbm,
         confidence=confidence,
     )
 
@@ -522,7 +514,6 @@ def threshold_sensitivity(
     rows = []
 
     for value in values:
-
         latency = base_latency_ms
         throughput = base_throughput_mbps
         failure_rate = base_failure_rate
