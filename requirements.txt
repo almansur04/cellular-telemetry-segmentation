@@ -1,9 +1,16 @@
+# Core numerical computing and data analysis
 numpy>=1.26
 pandas>=2.2
+pyarrow>=15.0
+
+# Statistical analysis and hypothesis testing
 scipy>=1.12
-scikit-learn>=1.4
 statsmodels>=0.14
 scikit-posthocs>=0.9
+
+# Machine learning
+scikit-learn>=1.4
+
+# Visualization and configuration
 matplotlib>=3.8
 PyYAML>=6.0
-pyarrow>=15.0
