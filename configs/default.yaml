@@ -1,0 +1,55 @@
+project:
+  name: cellular-telemetry-segmentation
+  random_seed: 42
+
+data:
+  csv_path: /content/drive/MyDrive/webbrowsing.csv
+  cleaned_parquet_path: /content/drive/MyDrive/webbrowsing_cleaned.parquet
+
+columns:
+  timestamp: test_time
+  target: page_download_speed
+  device: device_model
+  device_code: device_model_code
+  cell: cell_id
+  network: network_type
+  url: url
+  rsrp: signal_strength
+  latency: page_response_latency
+  ping: ping_time
+  active_speed: speed
+  response: response_flag
+  app_version: app_version
+
+device_analysis:
+  reference_url: https://yandex.kz/
+  allowed_networks:
+    - 5G
+    - LTE+
+  rsrp_min_dbm: -80
+  min_device_sessions: 50
+
+cell_analysis:
+  minimum_sessions_per_cell: 100
+  latency_failure_ms: 1500
+  throughput_failure_mbps: 0.5
+  throughput_urls:
+    - https://yandex.kz/
+    - https://www.instagram.com
+    - https://2gis.kz/
+  failure_rate_threshold: 0.05
+  rsrp_coverage_threshold_dbm: -95
+  top_n_cells: 50
+
+ml:
+  test_size: 0.20
+  n_estimators: 300
+  max_depth: 12
+  use_temporal_split: true
+  permutation_repeats: 10
+
+output:
+  root: results
+  figures: results/figures
+  tables: results/tables
+  metrics: results/metrics
