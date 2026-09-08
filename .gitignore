@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Data
+data/*.csv
+data/*.csv.gz
+data/*.parquet
+data/*.feather
+data/*.xlsx
+
+# Generated outputs
+results/figures/*.png
+results/figures/*.pdf
+results/tables/*.csv
+results/metrics/*.json
+
+# Colab / local
+/content/
+/mnt/
