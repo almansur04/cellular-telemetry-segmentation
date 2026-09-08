@@ -4,7 +4,10 @@ import numpy as np
 import pandas as pd
 
 
-DROP_COLUMNS = ["imei", "phone_number"]
+DROP_COLUMNS = [
+    "imei",
+    "phone_number",
+]
 
 INVALID_VALUES = {
     "mcc": [0],
@@ -14,9 +17,11 @@ INVALID_VALUES = {
 }
 
 
-def parse_and_clean(df: pd.DataFrame) -> pd.DataFrame:
+def parse_and_clean(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
     """
-    Clean the raw telemetry dataset without changing scientific measurements.
+    Clean raw telemetry without altering scientific measurements.
     """
     out = df.copy()
 
@@ -28,40 +33,76 @@ def parse_and_clean(df: pd.DataFrame) -> pd.DataFrame:
 
     for column in DROP_COLUMNS:
         if column in out.columns:
-            out = out.drop(columns=column)
+            out = out.drop(
+                columns=column
+            )
 
+    # Preserve identifier columns as nullable integers rather than
+    # converting them to floating-point values after inserting NaN.
     for column, invalid_values in INVALID_VALUES.items():
-        if column in out.columns:
-            out[column] = out[column].replace(invalid_values, np.nan)
+        if column not in out.columns:
+            continue
 
-    # Derived time variables.
+        series = pd.to_numeric(
+            out[column],
+            errors="coerce",
+        )
+
+        series = series.replace(
+            invalid_values,
+            np.nan,
+        )
+
+        out[column] = series.astype("Int64")
+
     if "test_time" in out.columns:
-        out["hour"] = out["test_time"].dt.hour
-        out["dayofweek"] = out["test_time"].dt.dayofweek
-        out["date"] = out["test_time"].dt.date
+        out["hour"] = (
+            out["test_time"]
+            .dt.hour
+            .astype("int8")
+        )
 
-    # The original exploratory analysis uses speed > 0 as the operational
-    # indicator for an active speed measurement.
+        out["dayofweek"] = (
+            out["test_time"]
+            .dt.dayofweek
+            .astype("int8")
+        )
+
+        out["date"] = (
+            out["test_time"]
+            .dt.normalize()
+        )
+
     if "speed" in out.columns:
-        out["speed_test_done"] = (out["speed"] > 0).astype("int8")
+        out["speed_test_done"] = (
+            out["speed"] > 0
+        ).astype("int8")
 
     return out
 
 
-def optimize_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+def optimize_dtypes(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
     """
-    Reduce memory footprint while preserving analytical meaning.
+    Reduce memory usage while preserving analytical meaning.
     """
     out = df.copy()
 
-    int_columns = out.select_dtypes(include=["int64"]).columns
-    for column in int_columns:
+    integer_columns = out.select_dtypes(
+        include=["int64"]
+    ).columns
+
+    for column in integer_columns:
         out[column] = pd.to_numeric(
             out[column],
             downcast="integer",
         )
 
-    float_columns = out.select_dtypes(include=["float64"]).columns
+    float_columns = out.select_dtypes(
+        include=["float64"]
+    ).columns
+
     for column in float_columns:
         out[column] = pd.to_numeric(
             out[column],
@@ -82,24 +123,53 @@ def optimize_dtypes(df: pd.DataFrame) -> pd.DataFrame:
 
     for column in categorical_columns:
         if column in out.columns:
-            out[column] = out[column].astype("category")
+            out[column] = out[column].astype(
+                "category"
+            )
 
     return out
 
 
-def validate_dataset(df: pd.DataFrame) -> dict:
-    """Return basic integrity checks."""
+def validate_dataset(
+    df: pd.DataFrame,
+) -> dict:
+    """Return reproducibility-oriented data-integrity checks."""
     return {
         "rows": int(len(df)),
         "columns": int(len(df.columns)),
-        "duplicate_rows": int(df.duplicated().sum()),
-        "missing_test_time": int(df["test_time"].isna().sum())
+        "duplicate_rows": int(
+            df.duplicated().sum()
+        ),
+        "missing_test_time": int(
+            df["test_time"].isna().sum()
+        )
         if "test_time" in df.columns
         else None,
-        "unique_devices": int(df["device_model"].nunique())
+        "device_models": int(
+            df["device_model"].nunique()
+        )
         if "device_model" in df.columns
         else None,
-        "unique_cells": int(df["cell_id"].nunique(dropna=True))
+        "network_types": int(
+            df["network_type"].nunique()
+        )
+        if "network_type" in df.columns
+        else None,
+        "urls": int(
+            df["url"].nunique()
+        )
+        if "url" in df.columns
+        else None,
+        "unique_device_ids": int(
+            df["device_id"].nunique()
+        )
+        if "device_id" in df.columns
+        else None,
+        "unique_cells": int(
+            df["cell_id"].nunique(
+                dropna=True
+            )
+        )
         if "cell_id" in df.columns
         else None,
     }

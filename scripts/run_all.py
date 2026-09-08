@@ -4,9 +4,13 @@ import argparse
 from pathlib import Path
 import sys
 
-import pandas as pd
-
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+sys.path.append(
+    str(
+        Path(__file__)
+        .resolve()
+        .parents[1]
+    )
+)
 
 from src.exploratory import (
     correlations,
@@ -36,82 +40,174 @@ from src.preprocessing import (
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
         "--config",
         default="configs/default.yaml",
     )
+
     args = parser.parse_args()
 
-    config = load_config(args.config)
-    ensure_output_dirs(config)
+    config = load_config(
+        args.config
+    )
 
-    raw_path = config["data"]["csv_path"]
+    ensure_output_dirs(
+        config
+    )
 
-    print(f"Loading raw data from: {raw_path}")
+    raw_path = config[
+        "data"
+    ]["csv_path"]
 
-    df = load_raw_csv(raw_path)
+    print(
+        f"Loading raw data from: {raw_path}"
+    )
 
-    print(f"Raw shape: {df.shape}")
+    df = load_raw_csv(
+        raw_path
+    )
 
-    cleaned = parse_and_clean(df)
-    cleaned = optimize_dtypes(cleaned)
+    print(
+        f"Raw shape: {df.shape}"
+    )
 
-    integrity = validate_dataset(cleaned)
+    cleaned = parse_and_clean(
+        df
+    )
 
-    print("\nDataset integrity:")
-    print(integrity)
+    cleaned = optimize_dtypes(
+        cleaned
+    )
+
+    integrity = validate_dataset(
+        cleaned
+    )
+
+    print(
+        "\nDataset integrity:"
+    )
+    print(
+        integrity
+    )
 
     save_dataframe(
         cleaned,
-        config["data"]["cleaned_parquet_path"],
+        config["data"][
+            "cleaned_parquet_path"
+        ],
     )
 
-    summary = dataset_summary(cleaned)
+    summary = dataset_summary(
+        cleaned
+    )
+
     save_json(
         summary,
-        Path(config["output"]["metrics"]) / "dataset_summary.json",
+        Path(
+            config["output"][
+                "metrics"
+            ]
+        )
+        / "dataset_summary.json",
     )
 
-    urls = summarize_urls(cleaned)
-    networks = summarize_network_types(cleaned)
-    hourly, weekday = summarize_temporal_patterns(cleaned)
-    corr = correlations(cleaned)
+    urls = summarize_urls(
+        cleaned
+    )
+
+    networks = summarize_network_types(
+        cleaned
+    )
+
+    hourly, weekday = (
+        summarize_temporal_patterns(
+            cleaned
+        )
+    )
+
+    corr = correlations(
+        cleaned
+    )
 
     save_csv(
         urls,
-        Path(config["output"]["tables"]) / "url_summary.csv",
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "url_summary.csv",
     )
 
     save_csv(
         networks,
-        Path(config["output"]["tables"]) / "network_summary.csv",
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "network_summary.csv",
     )
 
     save_csv(
         hourly,
-        Path(config["output"]["tables"]) / "hourly_summary.csv",
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "hourly_summary.csv",
     )
 
     save_csv(
         weekday,
-        Path(config["output"]["tables"]) / "weekday_summary.csv",
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "weekday_summary.csv",
     )
 
     corr.to_csv(
-        Path(config["output"]["tables"]) / "correlations.csv"
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "correlations.csv"
     )
 
     plot_framework(
-        Path(config["output"]["figures"]) / "01_framework"
+        Path(
+            config["output"][
+                "figures"
+            ]
+        )
+        / "01_framework"
     )
 
     plot_url_performance(
         urls,
-        Path(config["output"]["figures"]) / "00_url_performance"
+        Path(
+            config["output"][
+                "figures"
+            ]
+        )
+        / "00_url_performance",
     )
 
-    print("\nPreprocessing and exploratory analysis completed.")
-    print(f"Cleaned data saved to: {config['data']['cleaned_parquet_path']}")
+    print(
+        "\nPreprocessing and exploratory analysis completed."
+    )
+
+    print(
+        "Cleaned data saved to:",
+        config["data"][
+            "cleaned_parquet_path"
+        ],
+    )
 
 
 if __name__ == "__main__":

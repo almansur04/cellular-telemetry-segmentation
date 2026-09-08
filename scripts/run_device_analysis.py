@@ -6,7 +6,13 @@ import sys
 
 import pandas as pd
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+sys.path.append(
+    str(
+        Path(__file__)
+        .resolve()
+        .parents[1]
+    )
+)
 
 from src.device_analysis import (
     create_device_subset,
@@ -19,6 +25,7 @@ from src.device_analysis import (
 from src.io_utils import (
     ensure_output_dirs,
     load_config,
+    load_cleaned_parquet,
     save_csv,
     save_json,
 )
@@ -30,77 +37,173 @@ from src.plotting import (
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
         "--config",
         default="configs/default.yaml",
     )
+
     args = parser.parse_args()
 
-    config = load_config(args.config)
-    ensure_output_dirs(config)
-
-    df = pd.read_parquet(
-        config["data"]["cleaned_parquet_path"]
+    config = load_config(
+        args.config
     )
 
-    da = config["device_analysis"]
-
-    clean_room = create_device_subset(
-        df,
-        reference_url=da["reference_url"],
-        allowed_networks=da["allowed_networks"],
-        rsrp_min_dbm=da["rsrp_min_dbm"],
-        min_device_sessions=da["min_device_sessions"],
+    ensure_output_dirs(
+        config
     )
 
-    summary = device_summary(clean_room)
-    ci = device_median_confidence_intervals(clean_room)
-    kw = kruskal_wallis_result(clean_room)
-    dunn = dunn_test(clean_room)
-    effects = pairwise_effect_sizes(clean_room)
+    df = load_cleaned_parquet(
+        config["data"][
+            "cleaned_parquet_path"
+        ]
+    )
+
+    da = config[
+        "device_analysis"
+    ]
+
+    clean_room = (
+        create_device_subset(
+            df,
+            reference_url=da[
+                "reference_url"
+            ],
+            allowed_networks=da[
+                "allowed_networks"
+            ],
+            rsrp_min_dbm=da[
+                "rsrp_min_dbm"
+            ],
+            min_device_sessions=da[
+                "min_device_sessions"
+            ],
+        )
+    )
+
+    summary = device_summary(
+        clean_room
+    )
+
+    ci = device_median_confidence_intervals(
+        clean_room,
+        iterations=da[
+            "bootstrap_iterations"
+        ],
+        confidence=da[
+            "confidence_level"
+        ],
+        random_state=config[
+            "project"
+        ]["random_seed"],
+    )
+
+    kw = kruskal_wallis_result(
+        clean_room
+    )
+
+    dunn = dunn_test(
+        clean_room
+    )
+
+    effects = pairwise_effect_sizes(
+        clean_room
+    )
 
     save_csv(
         summary,
-        Path(config["output"]["tables"]) / "device_summary.csv",
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "device_summary.csv",
     )
 
     save_csv(
         ci,
-        Path(config["output"]["tables"]) / "device_median_ci.csv",
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "device_median_ci.csv",
     )
 
     save_csv(
         effects,
-        Path(config["output"]["tables"]) / "device_cliffs_delta.csv",
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "device_cliffs_delta.csv",
     )
 
     dunn.to_csv(
-        Path(config["output"]["tables"]) / "dunn_bonferroni.csv"
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "dunn_bonferroni.csv"
     )
 
     save_json(
         kw,
-        Path(config["output"]["metrics"]) / "kruskal_wallis.json",
+        Path(
+            config["output"][
+                "metrics"
+            ]
+        )
+        / "kruskal_wallis.json",
     )
 
     plot_device_boxplot(
         clean_room,
-        Path(config["output"]["figures"]) / "02_device_throughput",
+        Path(
+            config["output"][
+                "figures"
+            ]
+        )
+        / "02_device_throughput",
     )
 
     plot_dunn_heatmap(
         dunn,
-        Path(config["output"]["figures"]) / "03_dunn_bonferroni",
+        Path(
+            config["output"][
+                "figures"
+            ]
+        )
+        / "03_dunn_bonferroni",
     )
 
-    print("\nRestricted device-analysis subset:")
-    print(f"{len(clean_room):,} sessions")
+    print(
+        "\nRestricted device-analysis subset:"
+    )
 
-    print("\nKruskal-Wallis:")
-    print(kw)
+    print(
+        f"{len(clean_room):,} sessions"
+    )
 
-    print("\nDevice summary:")
-    print(summary.to_string(index=False))
+    print(
+        "\nKruskal-Wallis:"
+    )
+
+    print(
+        kw
+    )
+
+    print(
+        "\nDevice summary:"
+    )
+
+    print(
+        summary.to_string(
+            index=False
+        )
+    )
 
 
 if __name__ == "__main__":

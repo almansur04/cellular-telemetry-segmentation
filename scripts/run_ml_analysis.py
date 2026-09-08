@@ -4,111 +4,291 @@ import argparse
 from pathlib import Path
 import sys
 
-import pandas as pd
-
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+sys.path.append(
+    str(
+        Path(__file__)
+        .resolve()
+        .parents[1]
+    )
+)
 
 from src.io_utils import (
     ensure_output_dirs,
     load_config,
+    load_cleaned_parquet,
     save_csv,
     save_json,
 )
 from src.ml_analysis import (
-    DEFAULT_FEATURES,
-    build_model,
-    evaluate_model,
+    build_rf_model,
+    build_ridge_model,
+    evaluate_model_with_ci,
     grouped_permutation_importance,
     random_split,
     temporal_split,
 )
-from src.plotting import plot_ml_importance
+from src.plotting import (
+    plot_ml_importance,
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+
     parser.add_argument(
         "--config",
         default="configs/default.yaml",
     )
+
     args = parser.parse_args()
 
-    config = load_config(args.config)
-    ensure_output_dirs(config)
+    config = load_config(
+        args.config
+    )
 
-    data_path = Path(config["data"]["cleaned_parquet_path"])
+    ensure_output_dirs(
+        config
+    )
 
-    if not data_path.exists():
-        raise FileNotFoundError(
-            f"Cleaned Parquet not found: {data_path}. "
-            "Run run_all.py first."
-        )
+    df = load_cleaned_parquet(
+        config["data"][
+            "cleaned_parquet_path"
+        ]
+    )
 
-    df = pd.read_parquet(data_path)
+    feature_columns = (
+        config["ml"]["features"]
+    )
 
-    feature_columns = DEFAULT_FEATURES
+    required_columns = (
+        feature_columns
+        + [
+            "page_download_speed",
+            "test_time",
+        ]
+    )
 
     working = df.dropna(
-        subset=feature_columns + ["page_download_speed"]
+        subset=required_columns
     ).copy()
 
-    if config["ml"]["use_temporal_split"]:
-        train, test = temporal_split(
-            working,
-            test_fraction=config["ml"]["test_size"],
+    ml_cfg = config[
+        "ml"
+    ]
+
+    if ml_cfg[
+        "use_temporal_split"
+    ]:
+        train, test = (
+            temporal_split(
+                working,
+                test_fraction=ml_cfg[
+                    "test_size"
+                ],
+            )
         )
+
         split_name = "temporal"
+
     else:
-        train, test = random_split(
-            working,
-            test_fraction=config["ml"]["test_size"],
-            random_state=config["project"]["random_seed"],
+        train, test = (
+            random_split(
+                working,
+                test_fraction=ml_cfg[
+                    "test_size"
+                ],
+                random_state=config[
+                    "project"
+                ]["random_seed"],
+            )
         )
+
         split_name = "random"
 
-    model = build_model(
-        n_estimators=config["ml"]["n_estimators"],
-        max_depth=config["ml"]["max_depth"],
-        random_state=config["project"]["random_seed"],
+    seed = config[
+        "project"
+    ]["random_seed"]
+
+    print(
+        f"ML split: {split_name}"
     )
 
-    metrics = evaluate_model(
-        model,
-        train,
-        test,
-        feature_columns,
+    print(
+        f"Training rows: {len(train):,}"
     )
 
-    importance = grouped_permutation_importance(
-        model,
-        test,
-        feature_columns,
-        repeats=config["ml"]["permutation_repeats"],
-        random_state=config["project"]["random_seed"],
+    print(
+        f"Test rows: {len(test):,}"
     )
 
-    metrics["split_type"] = split_name
-    metrics["train_rows"] = len(train)
-    metrics["test_rows"] = len(test)
+    # --------------------------------------------------------
+    # Baseline
+    # --------------------------------------------------------
+    ridge = build_ridge_model(
+        alpha=ml_cfg[
+            "ridge"
+        ]["alpha"]
+    )
+
+    ridge_metrics = (
+        evaluate_model_with_ci(
+            ridge,
+            train,
+            test,
+            feature_columns,
+            iterations=1000,
+            confidence=0.95,
+            random_state=seed,
+        )
+    )
+
+    ridge_metrics.update(
+        {
+            "model": "Ridge baseline",
+            "split_type": split_name,
+            "train_rows": len(train),
+            "test_rows": len(test),
+        }
+    )
+
+    # --------------------------------------------------------
+    # Random Forest
+    # --------------------------------------------------------
+    rf_cfg = ml_cfg[
+        "random_forest"
+    ]
+
+    rf = build_rf_model(
+        n_estimators=rf_cfg[
+            "n_estimators"
+        ],
+        max_depth=rf_cfg[
+            "max_depth"
+        ],
+        min_samples_leaf=rf_cfg[
+            "min_samples_leaf"
+        ],
+        random_state=seed,
+    )
+
+    rf_metrics = (
+        evaluate_model_with_ci(
+            rf,
+            train,
+            test,
+            feature_columns,
+            iterations=1000,
+            confidence=0.95,
+            random_state=seed,
+        )
+    )
+
+    rf_metrics.update(
+        {
+            "model": "Random Forest",
+            "split_type": split_name,
+            "train_rows": len(train),
+            "test_rows": len(test),
+        }
+    )
+
+    model_comparison = [
+        ridge_metrics,
+        rf_metrics,
+    ]
+
+    save_csv(
+        __import__(
+            "pandas"
+        ).DataFrame(
+            model_comparison
+        ),
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "ml_model_comparison.csv",
+    )
 
     save_json(
-        metrics,
-        Path(config["output"]["metrics"]) / "ml_metrics.json",
+        rf_metrics,
+        Path(
+            config["output"][
+                "metrics"
+            ]
+        )
+        / "ml_random_forest_metrics.json",
+    )
+
+    save_json(
+        ridge_metrics,
+        Path(
+            config["output"][
+                "metrics"
+            ]
+        )
+        / "ml_ridge_metrics.json",
+    )
+
+    # --------------------------------------------------------
+    # Permutation importance
+    # --------------------------------------------------------
+    importance = (
+        grouped_permutation_importance(
+            rf,
+            test,
+            feature_columns,
+            repeats=ml_cfg[
+                "permutation_repeats"
+            ],
+            random_state=seed,
+        )
     )
 
     save_csv(
         importance,
-        Path(config["output"]["tables"]) / "ml_feature_importance.csv",
+        Path(
+            config["output"][
+                "tables"
+            ]
+        )
+        / "ml_feature_importance.csv",
     )
 
     plot_ml_importance(
         importance,
-        Path(config["output"]["figures"]) / "04_ml_feature_importance",
+        Path(
+            config["output"][
+                "figures"
+            ]
+        )
+        / "08_ml_feature_importance",
     )
 
-    print("ML analysis completed.")
-    print(metrics)
-    print(importance)
+    print(
+        "\nModel comparison:"
+    )
+
+    print(
+        __import__(
+            "pandas"
+        ).DataFrame(
+            model_comparison
+        ).to_string(
+            index=False
+        )
+    )
+
+    print(
+        "\nPermutation importance:"
+    )
+
+    print(
+        importance.to_string(
+            index=False
+        )
+    )
 
 
 if __name__ == "__main__":

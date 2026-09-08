@@ -1,36 +1,49 @@
 # Cellular Telemetry Segmentation
 
-A reproducible analysis pipeline for studying device-model heterogeneity and cell-level quality impact in large-scale mobile web telemetry.
+Reproducible analysis of large-scale mobile web telemetry for workload normalization, device-model comparison, cell-level quality analysis, and operational prioritization.
 
 ## Research objective
 
-The project asks two related questions:
+The project investigates two related questions:
 
 1. Do device models exhibit different application-level throughput distributions after restricting workload and operating conditions?
-2. Can cell-level quality failures be ranked by observed user-impact volume to support network investigation?
+2. Can cell-level quality failures be ranked by observed impact volume to support network investigation?
 
-The methodology intentionally distinguishes:
+The analysis distinguishes:
 
-- measured device-model differences;
-- application/workload heterogeneity;
+- workload heterogeneity;
+- device-model associations;
 - failure severity;
-- failure impact;
+- observed failure impact;
 - operational triage candidates.
 
-It does not claim causal root-cause diagnosis from telemetry alone.
+The study does not claim causal hardware attribution or automatic network root-cause diagnosis from telemetry alone.
 
 ## Dataset
 
-The study uses one million mobile web-browsing sessions collected by a single cellular operator in Kazakhstan.
+The analysis uses 1,000,000 mobile web-browsing sessions collected by a single cellular operator in Kazakhstan.
 
-The raw dataset is not included in this repository.
+The raw dataset is intentionally excluded from GitHub.
 
-Expected Colab path:
+Expected local path:
 
-`/content/drive/MyDrive/webbrowsing.csv`
+`data/webbrowsing.csv`
 
-## Reproduction in Google Colab
+## Reproduction
 
-```python
-from google.colab import drive
-drive.mount('/content/drive')
+From the repository root:
+
+```powershell
+pip install -r requirements.txt
+
+python scripts/run_all.py --config configs/default.yaml
+
+python scripts/run_device_analysis.py --config configs/default.yaml
+
+python scripts/run_adjusted_device_analysis.py --config configs/default.yaml
+
+python scripts/run_ml_analysis.py --config configs/default.yaml
+
+python scripts/run_cell_analysis.py --config configs/default.yaml
+
+python scripts/run_sensitivity_analysis.py --config configs/default.yaml

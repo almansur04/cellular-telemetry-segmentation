@@ -1,0 +1,674 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+% ============================================================
+% Packages
+% ============================================================
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{microtype}
+\usepackage{balance}
+
+% Generated figures
+\graphicspath{{../results/figures/}}
+
+\begin{document}
+
+% ============================================================
+% Title
+% ============================================================
+\title{Telemetry Segmentation for Device-Model Comparison and Cell-Level Quality Prioritization in Cellular Networks}
+
+% ============================================================
+% Author
+% ============================================================
+\author{
+\IEEEauthorblockN{Almansur Kakimov}
+\IEEEauthorblockA{
+\textit{School of Engineering}\\
+\textit{Nazarbayev University}\\
+Astana, Kazakhstan\\
+\url{almansur.kakimov@nu.edu.kz}
+}
+}
+
+\maketitle
+
+% ============================================================
+% Abstract
+% ============================================================
+\begin{abstract}
+Application-level cellular performance measurements depend on workload, network conditions, and user-equipment characteristics. Consequently, unstratified telemetry can mix changes in the measurement population with changes in network quality. This paper presents a telemetry segmentation procedure that normalizes workload and operating conditions before device-model comparison and separately aggregates application-level quality failures for cell prioritization. We analyze 1,000,000 mobile web-browsing sessions collected by a single cellular operator in Kazakhstan. Mean measured download speed ranges from 0.23 to 4.71\,Mbps across six web resources, motivating workload normalization. A restricted set of 40,439 sessions is formed using a common resource, reported 5G or LTE+ connectivity, reported signal strength of at least $-80$\,dBm, and a derived active-speed indicator. Across ten device models, the Kruskal--Wallis test detects significant distributional differences ($H(9)=6839.03$, $p<0.001$, $\epsilon^2=0.169$), with median throughput ranging from 4.09 to 5.95\,Mbps. A cell-fixed-effects model with standard errors clustered by cell yields consistent device-model associations after adjustment for signal strength, network type, hour, and day of week. These associations remain similar when the analysis is restricted to the 695 cells containing multiple device models. For cell-level quality analysis, 856 of 945 cells exceed a 5\% failure-rate threshold, while the 50 cells with the largest observed failure counts account for 34.8\% of 100,693 observed failures. Sensitivity analysis shows that the top-50 set is stable across the tested throughput thresholds but more sensitive to the latency threshold. The results support workload normalization, device-aware interpretation, and separate severity-versus-impact views when analyzing large-scale application-level cellular telemetry.
+\end{abstract}
+
+% ============================================================
+% Keywords
+% ============================================================
+\begin{IEEEkeywords}
+Cellular telemetry, mobile network measurement, device heterogeneity, application-level throughput, cell prioritization, network monitoring, machine learning.
+\end{IEEEkeywords}
+
+% ============================================================
+% I. INTRODUCTION
+% ============================================================
+\section{Introduction}
+
+Mobile network operators routinely monitor throughput, latency, coverage, and failure indicators to assess service quality. Measurements collected at the application layer, however, are shaped by more than the radio interface. The accessed resource, transferred workload, terminal characteristics, serving cell, temporal conditions, and transport path can all affect the observed outcome. Consequently, changes in aggregate application-level performance may reflect either a change in network conditions or a change in the population being measured.
+
+Device-model heterogeneity is one source of this measurement variation. Commercial terminals differ in radio-frequency configurations, modem implementations, antenna designs, software stacks, and power-management behavior. Standardized radio requirements define common performance requirements for user equipment, while implementation details remain device-specific \cite{b1}. Large-scale measurements therefore need to account for terminal composition when comparing application-level performance.
+
+The accessed workload is another important source of variation. A short web transaction may provide little opportunity for a connection to approach its available rate, while a resource generating sustained data transfer can produce a substantially different application-level measurement. Measurements of mobile web and user-perceived network performance have demonstrated the influence of terminal, application, protocol, and workload characteristics \cite{b2,b3,b4,b5}.
+
+This issue also matters for data-driven network management. 3GPP work on AI/ML for NG-RAN has expanded from Release~18 studies toward Release~19 enhancements that include AI/ML-assisted coverage and capacity optimization and related data-collection mechanisms \cite{b6,b7}. Such systems depend on telemetry whose systematic sources of variation are understood. Otherwise, predictable differences caused by workload or terminal composition can be mistaken for network anomalies.
+
+This paper studies two operational questions. First, after restricting the workload and broad operating regime, do device models exhibit persistent differences in application-level throughput distributions? Second, can application-level quality failures be separated into failure severity and observed failure volume to identify cells that merit earlier investigation?
+
+The study uses one million mobile web-browsing sessions collected by a single cellular operator in Kazakhstan. The telemetry contains device attributes, reported network type, reported signal strength, serving-cell identifiers, application version, web resource, page-response latency, page download speed, ping time, geographic coordinates, and an observed speed field. The analysis combines descriptive workload analysis, nonparametric device comparison, cell-aware regression, cell-level failure aggregation, threshold sensitivity analysis, and an exploratory predictive model.
+
+The main contributions are:
+
+\begin{itemize}
+\item A reproducible telemetry-segmentation procedure that restricts device comparisons to a common workload and a defined operating regime.
+\item Statistical evidence of between-device-model variation in application-level throughput, together with a cell-fixed-effects analysis and a within-cell robustness check.
+\item A cell-quality framework that separates failure severity, measured by failure rate, from observed user-impact volume, measured by failure count.
+\item An operational RSRP-based triage heuristic and threshold-sensitivity analysis for distinguishing cells that may warrant coverage-oriented investigation from those that may warrant capacity, transport, congestion, or interference investigation.
+\item An exploratory predictive analysis showing that workload remains the dominant information source for application-level throughput when downstream performance variables are excluded from the feature set.
+\end{itemize}
+
+Figure~\ref{fig:framework} summarizes the analysis workflow.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{01_framework.pdf}
+\caption{Telemetry analysis workflow. Raw measurements are cleaned and validated before workload and operating-regime segmentation. Device-model analysis uses the restricted regime, whereas session-quality aggregation is performed at the cell level. The predictive model is exploratory and does not provide causal attribution.}
+\label{fig:framework}
+\end{figure}
+
+% ============================================================
+% II. DATASET AND TELEMETRY CHARACTERISTICS
+% ============================================================
+\section{Dataset and Telemetry Characteristics}
+
+\subsection{Dataset Profile}
+
+The dataset contains 1,000,000 mobile web-browsing sessions collected by a single cellular operator in Kazakhstan. The raw dataset contains 24 columns describing device, network, application, web-resource, performance, and geographic attributes.
+
+There are 11 device models, four reported network types, and six web resources. The operator field contains a single operator value. The dataset contains no duplicate rows. The \texttt{imei} field contains no usable observations and was removed, while \texttt{phone\_number} is sparsely populated and was also removed.
+
+Invalid identifiers were treated as unavailable when MCC or MNC was zero, when the cell identifier was $-1$, or when LAC was 65535. Numeric variables were downcast where appropriate and repeated categorical fields were represented using categorical data types. The resulting cleaned dataset contains 26 columns after adding derived variables and was stored in Parquet format.
+
+The dataset contains 11 unique values in the available \texttt{device\_id} field. Because this identifier does not provide a higher-granularity handset population in the supplied telemetry, individual handset-level repeated-measures modeling is not attempted.
+
+\begin{table}[t]
+\caption{Summary of the cellular telemetry dataset.}
+\label{tab:dataset}
+\centering
+\small
+\begin{tabular}{lc}
+\toprule
+\textbf{Attribute} & \textbf{Value}\\
+\midrule
+Sessions & 1,000,000\\
+Original columns & 24\\
+Derived/cleaned columns & 26\\
+Device models & 11\\
+Reported network types & 4\\
+Web resources & 6\\
+Unique cell IDs & 1,537\\
+Cells with $\geq$100 sessions & 945\\
+Restricted device-analysis sessions & 40,439\\
+Device models tested & 10\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Measurement Variables}
+
+The principal application-level performance variables are page-response latency and page download speed. Page download speed is treated as an application-level measurement and is not interpreted as a direct physical-layer, MAC-layer, or scheduler throughput measurement.
+
+The telemetry contains a field named \texttt{signal\_strength}. Because the supplied dataset does not independently expose the underlying radio-measurement definition in the analysis pipeline, this field is described as reported signal strength and is used as an RSRP proxy in the analyses that apply dBm thresholds.
+
+The \texttt{speed} field is highly zero-inflated. We therefore derive an operational indicator
+
+\begin{equation}
+S_j =
+\begin{cases}
+1, & \text{if } \texttt{speed}_j > 0,\\
+0, & \text{otherwise}.
+\end{cases}
+\end{equation}
+
+This variable is an inference from the telemetry and is not assumed to be an independently validated application-state flag.
+
+\subsection{Workload Heterogeneity}
+
+The six observed web resources have approximately balanced session counts but substantially different application-level throughput distributions. The mean page download speed ranges from 0.23\,Mbps for \texttt{google.com} to 4.71\,Mbps for \texttt{yandex.kz}.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{00_url_performance.pdf}
+\caption{Mean application-level download speed by web resource. The values range from 0.23 to 4.71\,Mbps, demonstrating the dependence of the measured metric on workload and accessed resource.}
+\label{fig:url_performance}
+\end{figure}
+
+This variation is sufficiently large that an aggregate throughput statistic cannot be interpreted independently of workload composition. The difference may reflect page structure, transferred content, protocol behavior, server-side conditions, and other resource-specific characteristics; it should not be interpreted as a direct comparison of network capacity.
+
+Only 21 of the one million sessions have a reported failure in the native response-status field, all associated with \texttt{egov.kz}. The resulting overall response success rate is 99.9979\%. Because the native response flag provides little discrimination in this dataset, continuous latency and throughput measurements are used for the operational quality criterion.
+
+\subsection{Reported Network Type}
+
+The average page download speed for 5G is approximately 1.98\,Mbps, compared with 1.89\,Mbps for LTE+. LTE has a lower mean download speed of approximately 1.70\,Mbps and a higher mean ping time of approximately 99.5\,ms. EDGE occurs in only three sessions.
+
+These values are descriptive rather than technology-level capacity comparisons. The telemetry does not provide sufficient information to control for spectrum, bandwidth, carrier aggregation, scheduler state, transport conditions, or cell load. In particular, the reported categories do not establish whether all observations labeled 5G use the same deployment mode.
+
+% ============================================================
+% III. DEVICE-MODEL THROUGHPUT ANALYSIS
+% ============================================================
+\section{Device-Model Throughput Analysis}
+
+\subsection{Restricted Operating Regime}
+
+The strong workload dependence observed in Section~II motivates a common-workload device comparison. The reference workload is \texttt{yandex.kz}. Observations are additionally restricted to reported 5G or LTE+ connectivity, reported signal strength of at least $-80$\,dBm, and the derived active-speed indicator $S_j=1$.
+
+These conditions produce 40,439 sessions. Device models with more than 50 observations in the restricted dataset are retained, yielding ten tested models.
+
+The restricted set is intended to reduce major heterogeneity associated with workload, reported signal conditions, reported network category, and passive observations. It does not form a controlled experiment: serving cell, time, network load, spectrum configuration, software state, and other unobserved factors may still differ among observations.
+
+\subsection{Nonparametric Comparison}
+
+Let $Y_j$ denote page download speed for session $j$. The Kruskal--Wallis test is used to determine whether throughput distributions differ across device models \cite{b8}. Following a significant omnibus test, Dunn's pairwise procedure with Bonferroni correction is used for the 45 pairwise comparisons \cite{b9}.
+
+The Bonferroni-adjusted probability is
+
+\begin{equation}
+p_{\mathrm{adj}} =
+\min(1,mp),
+\end{equation}
+
+where $p$ is the unadjusted pairwise probability and
+
+\begin{equation}
+m=\binom{10}{2}=45.
+\end{equation}
+
+The omnibus effect is summarized by
+
+\begin{equation}
+\epsilon^2 =
+\frac{H-k+1}{N-k},
+\end{equation}
+
+where $H$ is the Kruskal--Wallis statistic, $k$ is the number of device groups, and $N$ is the total number of observations.
+
+\subsection{Unadjusted Device-Model Results}
+
+The Kruskal--Wallis statistic is
+
+\begin{equation}
+H(9)=6839.03,
+\end{equation}
+
+with $p<0.001$ and
+
+\begin{equation}
+\epsilon^2=0.169.
+\end{equation}
+
+The result indicates a substantial association between device model and the ranked throughput distribution within the restricted operating regime. It does not establish a causal hardware effect.
+
+\begin{table}[t]
+\caption{Device-model throughput in the restricted operating regime.}
+\label{tab:device}
+\centering
+\footnotesize
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Device} & \textbf{Median} & \textbf{IQR} & \textbf{Sessions}\\
+& \textbf{Mbps} & \textbf{Mbps} & \\
+\midrule
+SM-A266B      & 5.950 & 2.260 & 6948\\
+CPH2529       & 5.790 & 2.220 & 3774\\
+TECNO CL7     & 5.595 & 2.208 & 1410\\
+22101316G     & 5.500 & 2.300 & 3425\\
+moto g35 5G  & 5.270 & 3.110 & 3513\\
+Z2357N        & 4.790 & 3.090 & 1085\\
+RMX3997       & 4.280 & 2.220 & 2885\\
+CPH2621       & 4.200 & 2.300 & 5850\\
+2409FPCC4G    & 4.090 & 1.710 & 3712\\
+CRT-NX1       & 4.090 & 2.460 & 7837\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The median measured throughput ranges from 5.95\,Mbps for SM-A266B to 4.09\,Mbps for 2409FPCC4G and CRT-NX1. The absolute difference is 1.86\,Mbps, corresponding to
+
+\begin{equation}
+\frac{5.95-4.09}{5.95}\times100
+=31.3\%
+\end{equation}
+
+relative to the highest median.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{02_device_throughput.pdf}
+\caption{Page download-speed distributions for the ten device models in the restricted comparison set. The ordering is by median throughput. Extreme observations are suppressed only for visual readability.}
+\label{fig:device}
+\end{figure}
+
+\subsection{Pairwise Comparisons and Dispersion}
+
+Figure~\ref{fig:dunn} shows the Bonferroni-adjusted Dunn comparisons. The purpose of the figure is to show the pairwise significance structure rather than to provide a device-performance ranking.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{03_dunn_bonferroni.pdf}
+\caption{Pairwise Dunn tests with Bonferroni correction. The color scale represents $-\log_{10}(p_{\mathrm{adj}})$; larger values indicate stronger evidence against identical throughput distributions. Asterisks indicate $p_{\mathrm{adj}}<0.05$.}
+\label{fig:dunn}
+\end{figure}
+
+The interquartile range provides a descriptive measure of cross-session dispersion. The moto g35 5G has the largest IQR at 3.11\,Mbps, while 2409FPCC4G has the smallest at 1.71\,Mbps. This quantity describes the distribution across sessions and should not be interpreted as temporal instability of an individual handset.
+
+\subsection{Cell-Aware Association Analysis}
+
+The restricted dataset contains 1,079 represented serving cells. Importantly, 695 cells (64.4\%) contain at least two evaluated device models, providing substantial within-cell overlap.
+
+To account for serving-cell heterogeneity, we fit a cell fixed-effects regression with clustered standard errors:
+
+\begin{equation}
+\begin{split}
+\log(1+Y_j)
+={}&\beta_0
++\beta_{\mathrm{device},j}
++\beta_1 S_j^{\mathrm{sig}}\\
+&+\beta_{\mathrm{network},j}
++\beta_2\,\mathrm{hour}_j
++\beta_3\,\mathrm{dayofweek}_j\\
+&+\alpha_{c(j)}
++\varepsilon_j,
+\end{split}
+\end{equation}
+
+where $S_j^{\mathrm{sig}}$ denotes reported signal strength, $\alpha_{c(j)}$ is a serving-cell fixed effect, and standard errors are clustered by serving cell. SM-A266B is the reference device and 5G is the reference reported network category.
+
+The primary model uses all represented cells. A robustness model is then fitted using only cells containing at least two device models. This second analysis tests whether the device-model associations remain when identification comes only from cells where within-cell device comparison is possible.
+
+\begin{table}[t]
+\caption{Cell-adjusted device-model associations relative to SM-A266B. Coefficients are estimated on the $\log(1+\mathrm{throughput})$ scale; intervals are 95\% CIs with standard errors clustered by serving cell.}
+\label{tab:adjusted}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.7pt}
+\begin{tabular}{lrrr}
+\toprule
+& \multicolumn{2}{c}{\textbf{Primary model}} &
+\textbf{Within-cell}\\
+\textbf{Device} &
+\textbf{Coefficient} &
+\textbf{95\% CI} &
+\textbf{Coefficient}\\
+\midrule
+2409FPCC4G   & -0.506 & [-0.590,-0.422] & -0.490\\
+Z2357N       & -0.366 & [-0.483,-0.249] & -0.361\\
+CRT-NX1      & -0.334 & [-0.355,-0.312] & -0.334\\
+CPH2621      & -0.324 & [-0.346,-0.303] & -0.324\\
+TECNO CL7   & -0.308 & [-0.396,-0.220] & -0.291\\
+RMX3997      & -0.307 & [-0.339,-0.276] & -0.307\\
+22101316G    & -0.305 & [-0.391,-0.218] & -0.289\\
+CPH2529      & -0.251 & [-0.333,-0.168] & -0.236\\
+moto g35 5G & -0.199 & [-0.231,-0.167] & -0.197\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The primary model uses 40,427 observations across 1,079 cells and has $R^2=0.180$. The multi-device-cell robustness model uses 35,751 observations across 695 cells and has $R^2=0.172$.
+
+The coefficients are highly consistent between the two analyses. For example, the coefficient for 2409FPCC4G changes from $-0.506$ in the full cell-fixed-effects model to $-0.490$ when only multi-device cells are retained. The corresponding coefficients for CRT-NX1, CPH2621, and moto g35 5G change by less than 0.003, 0.001, and 0.002, respectively.
+
+This stability provides evidence that the observed device-model associations are not solely produced by comparing devices that occupy entirely different sets of serving cells. Nevertheless, the coefficients remain observational associations rather than causal estimates of hardware performance.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{04_adjusted_device_effects.pdf}
+\caption{Device-model associations after serving-cell adjustment. Coefficients are estimated relative to SM-A266B on the $\log(1+\mathrm{throughput})$ scale; error bars denote 95\% confidence intervals with standard errors clustered by serving cell.}
+\label{fig:adjusted}
+\end{figure}
+
+% ============================================================
+% IV. CELL-LEVEL QUALITY PRIORITIZATION
+% ============================================================
+\section{Cell-Level Quality Prioritization}
+
+\subsection{Session Quality Criterion}
+
+The native response-status field contains only 21 reported failures in one million sessions. We therefore define a deterministic operational quality criterion from continuous application-level measurements.
+
+Latency failure is
+
+\begin{equation}
+L_j =
+\mathbb{1}
+\left[
+\mathrm{Latency}_j
+>
+1500\ \mathrm{ms}
+\right].
+\end{equation}
+
+Throughput failure is defined only for the selected higher-traffic resources
+
+\begin{equation}
+\mathcal{U}
+=
+\left\{
+\texttt{yandex.kz},
+\texttt{instagram.com},
+\texttt{2gis.kz}
+\right\},
+\end{equation}
+
+as
+
+\begin{equation}
+T_j =
+\mathbb{1}
+\left[
+U_j\in\mathcal{U}
+\land
+Y_j<0.5\ \mathrm{Mbps}
+\land
+S_j=1
+\right].
+\end{equation}
+
+The session-level quality indicator is
+
+\begin{equation}
+I_j =
+\begin{cases}
+1, & L_j=1\ \lor\ T_j=1,\\
+0, & \text{otherwise}.
+\end{cases}
+\end{equation}
+
+This criterion is an operational monitoring rule rather than a validated QoE model or operator SLA.
+
+\subsection{Cell Severity and Observed Impact}
+
+For serving cell $c$, let $N_c$ be the number of observed sessions and $F_c$ the number satisfying the quality-failure criterion:
+
+\begin{equation}
+F_c =
+\sum_{j\in c} I_j,
+\qquad
+R_c =
+\frac{F_c}{N_c}.
+\end{equation}
+
+We retain two distinct operational quantities:
+
+\begin{equation}
+\mathrm{Severity}_c=R_c
+\end{equation}
+
+and
+
+\begin{equation}
+\mathrm{Impact}_c=F_c.
+\end{equation}
+
+Failure rate measures the fraction of observed sessions affected, whereas failure count measures the absolute number of observed quality-failure events. Neither quantity alone describes all aspects of operational priority.
+
+Cells with fewer than 100 observed sessions are excluded. Wilson 95\% confidence intervals are calculated for the failure rate of every retained cell.
+
+\subsection{RSRP-Based Operational Triage}
+
+Among cells with a failure rate of at least 5\%, reported signal strength is used as a simple triage feature. A cell with median reported signal strength below $-95$\,dBm is labeled a \emph{coverage candidate}; otherwise it is labeled a \emph{capacity/congestion candidate}.
+
+These terms denote investigation candidates rather than confirmed root causes. Strong reported signal does not establish congestion, since elevated application-level failure could also result from interference, transport limitations, server-side behavior, or other conditions. Similarly, weak reported signal does not establish that radio coverage is the sole cause.
+
+% ============================================================
+% V. CELL-LEVEL RESULTS AND ROBUSTNESS
+% ============================================================
+\section{Cell-Level Results and Robustness}
+
+Among the 945 cells satisfying the minimum-session criterion, 856 have a failure rate of at least 5\%:
+
+\begin{equation}
+\frac{856}{945}\times100
+=90.6\%.
+\end{equation}
+
+The total number of observed quality failures is 100,693.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{06_cell_failure_concentration.pdf}
+\caption{Concentration of observed quality failures among the 50 highest-impact cells. Bars show observed failure counts; the line shows their cumulative share of all 100,693 failures. The top 50 cells account for 34.8\% of all observed failures.}
+\label{fig:concentration}
+\end{figure}
+
+The 50 highest-impact cells represent only
+
+\begin{equation}
+\frac{50}{945}\times100
+=5.29\%
+\end{equation}
+
+of the analyzed cells, yet account for 34.8\% of all observed quality failures.
+
+This result indicates that degradation is widespread when expressed as the proportion of affected sessions, while observed impact is more concentrated when expressed as absolute failure volume. It does not imply a universal 80/20 Pareto relationship.
+
+\begin{table}[t]
+\caption{Ten highest-impact cells ranked by observed quality-failure count. Triage labels are candidates for investigation rather than confirmed root causes. Signal values are reported in dBm.}
+\label{tab:cells}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.4pt}
+\begin{tabular}{rrrrrl}
+\toprule
+\textbf{Cell} & \textbf{Sess.} & \textbf{Fail.} &
+\textbf{Rate} & \textbf{Signal} & \textbf{Candidate}\\
+\midrule
+27440139 & 20108 & 2362 & 11.75\% & $-92$  & Capacity\\
+27037442 & 20966 & 1702 & 8.12\%  & $-84$  & Capacity\\
+27006764 & 13637 & 1701 & 12.47\% & $-100$ & Coverage\\
+26999309 & 16027 & 1631 & 10.18\% & $-75$  & Capacity\\
+27462413 & 12955 & 1229 & 9.49\%  & $-98$  & Coverage\\
+27502959 & 12507 & 1137 & 9.09\%  & $-76$  & Capacity\\
+26629899 & 10587 & 1105 & 10.44\% & $-90$  & Capacity\\
+27546798 & 6122  & 933  & 15.24\% & $-88$  & Capacity\\
+27489865 & 10766 & 930  & 8.64\%  & $-79$  & Capacity\\
+27440129 & 10273 & 910  & 8.86\%  & $-85$  & Capacity\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Figure~\ref{fig:impactseverity} shows the relationship between cell severity and observed impact volume.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{07_cell_impact_vs_severity.pdf}
+\caption{Cell-level failure severity versus observed user-impact volume. The vertical dashed line marks the 5\% operational threshold. Cells with larger failure rates and larger observed failure counts occupy the upper-right portion of the plot.}
+\label{fig:impactseverity}
+\end{figure}
+
+Cells toward the upper-right region combine relatively high failure rates with large numbers of observed failures and are therefore natural candidates for early operational investigation. In contrast, a cell with a high failure rate but few observed sessions may represent a more localized issue.
+
+\subsection{Threshold Sensitivity}
+
+The operational thresholds are heuristics, so the resulting cell analysis is repeated under alternative values.
+
+For latency thresholds of 1000, 1500, and 2000\,ms, the number of cells above the failure-rate threshold is 945, 856, and 501, respectively. The corresponding top-50 failure-volume sets have Jaccard similarities of 0.695, 1.000, and 0.695 relative to the 1500-ms baseline.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{09_sensitivity_latency.pdf}
+\caption{Sensitivity of the top-50 cell set to the latency-failure threshold. Jaccard similarity is computed relative to the 1500-ms baseline.}
+\label{fig:sensitivity_latency}
+\end{figure}
+
+For throughput thresholds of 0.25, 0.5, and 1.0\,Mbps, 852, 856, and 856 cells exceed the 5\% failure-rate threshold. The top-50 impact set is unchanged across these three throughput thresholds, yielding a Jaccard similarity of 1.0 relative to the baseline.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{09_sensitivity_throughput.pdf}
+\caption{Sensitivity of the top-50 cell set to the throughput-failure threshold. The top-50 ranking remains unchanged across the tested thresholds.}
+\label{fig:sensitivity_throughput}
+\end{figure}
+
+The sensitivity analysis therefore indicates that the observed impact ranking is more dependent on the latency criterion than on the tested throughput criterion. This is a useful limitation of the operational rule rather than evidence for selecting one universal threshold.
+
+\subsection{Failure-Rate Threshold Sensitivity}
+
+Changing the cell failure-rate threshold from 2\% to 5\% to 10\% changes the number of cells classified as above threshold from 935 to 856 to 517.
+
+The corresponding numbers of cells whose Wilson lower confidence bound is at least the selected threshold are 911, 748, and 287, respectively.
+
+This distinction demonstrates that a cell may exceed an operational threshold in the observed sample without providing equally strong statistical evidence that its underlying failure probability exceeds that threshold.
+
+\subsection{RSRP Triage Sensitivity}
+
+At the baseline $-95$\,dBm signal threshold, 50 cells are classified as coverage candidates and 806 as capacity/congestion candidates among the cells above the 5\% failure-rate threshold.
+
+Changing the threshold to $-90$\,dBm yields 117 coverage candidates and 739 capacity/congestion candidates, with 92.2\% classification agreement relative to the baseline. Changing it to $-100$\,dBm yields 11 coverage candidates and 845 capacity/congestion candidates, with 95.4\% agreement.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{09_sensitivity_rsrp.pdf}
+\caption{Sensitivity of coverage-versus-capacity candidate classification to the reported-signal threshold. Agreement is computed relative to the baseline $-95$\,dBm classification among cells above the 5\% failure-rate threshold.}
+\label{fig:sensitivity_rsrp}
+\end{figure}
+
+The number of cells assigned to each candidate category depends on the selected signal boundary. The relatively high agreement with the baseline indicates that the partition is reasonably stable at the cell level, but the threshold should remain an operational tuning parameter rather than a universal radio criterion.
+
+% ============================================================
+% VI. EXPLORATORY PREDICTIVE ANALYSIS
+% ============================================================
+\section{Exploratory Predictive Analysis}
+
+A predictive model is used to characterize which telemetry variables contain information about application-level download speed. The analysis is explicitly exploratory and is not used to infer causal effects.
+
+The primary predictor set contains reported signal strength, reported network type, device-model code, web resource, hour, day of week, latitude, and longitude.
+
+The variables \texttt{speed} and \texttt{ping\_time} are excluded from the primary model because they are closely related performance measurements from the same session and could create leakage or post-outcome interpretation problems.
+
+Categorical variables are one-hot encoded. The data are sorted chronologically, with the earliest 80\% used for training and the latest 20\% held out for evaluation. The models are a Ridge regression baseline and a Random Forest regressor.
+
+\begin{table}[t]
+\caption{Predictive performance on the temporal 20\% holdout.}
+\label{tab:ml}
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & $\boldsymbol{R^2}$ & \textbf{MAE (Mbps)} & \textbf{RMSE (Mbps)}\\
+\midrule
+Ridge & 0.732 & 0.658 & 1.044\\
+Random Forest & 0.729 & 0.598 & 1.051\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Ridge baseline achieves $R^2=0.732$, MAE of 0.658\,Mbps, and RMSE of 1.044\,Mbps. The Random Forest achieves a similar $R^2$ of 0.729, a lower MAE of 0.598\,Mbps, and RMSE of 1.051\,Mbps. Thus, the more complex model does not materially improve out-of-sample $R^2$ over the regularized linear baseline.
+
+Held-out permutation analysis is performed on the original telemetry variables. The dominant variable is web resource, with an average decrease in held-out $R^2$ of 1.548 when the resource assignment is permuted. Device-model code and hour have much smaller decreases of 0.0289 and 0.0233, respectively.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{08_ml_feature_importance.pdf}
+\caption{Held-out permutation importance for the Random Forest model. Bars show the decrease in test-set $R^2$ after permuting each original telemetry variable; error bars show the standard deviation across ten permutations.}
+\label{fig:ml}
+\end{figure}
+
+The URL importance value exceeds one because the difference is computed relative to a predictive $R^2$ baseline; permutation can reduce the model's $R^2$ below zero. The value therefore does not represent a percentage of variance explained or a causal contribution.
+
+The predictive analysis reinforces the descriptive result in Section~II: the web resource is the dominant information source for predicting this application-level measurement. The result motivates workload normalization but does not establish that web resource causally determines physical network throughput.
+
+% ============================================================
+% VII. DISCUSSION
+% ============================================================
+\section{Discussion}
+
+The results establish three empirical observations and one methodological implication.
+
+First, workload heterogeneity is large enough to materially affect interpretation of application-level throughput. The six web resources produce mean measured speeds ranging from 0.23 to 4.71\,Mbps, and the leakage-free predictive analysis likewise identifies web resource as the strongest predictive variable. A network-wide application-level throughput statistic can therefore change when the workload mix changes, even without a corresponding change in radio infrastructure.
+
+Second, device-model associations remain after substantial segmentation and cell adjustment. The unadjusted analysis shows median throughput values ranging from 4.09 to 5.95\,Mbps. More importantly, cell-fixed-effects coefficients remain consistently negative relative to SM-A266B, and the coefficients remain similar when only the 695 multi-device cells are retained. This consistency reduces the likelihood that the observed ordering is entirely attributable to devices occupying disjoint serving-cell populations.
+
+The device result should nevertheless be interpreted as an association. The available telemetry does not measure modem implementation, antenna configuration, thermal state, battery state, operating-system scheduling, spectrum configuration, or instantaneous cell load. The study therefore cannot attribute the observed differences to a specific hardware or software mechanism.
+
+Third, severity and impact provide different views of cell quality. In the analyzed population, 90.6\% of cells exceed the 5\% failure-rate threshold, but 5.29\% of cells account for 34.8\% of all observed quality failures. Failure-rate ranking emphasizes how frequently sessions are affected, whereas failure-count ranking emphasizes the observed volume of affected sessions. Both perspectives are relevant to operational prioritization.
+
+The fourth implication concerns operational thresholds. The throughput threshold produces a stable top-50 impact set over the tested range, whereas the latency threshold has a larger effect on the high-impact set. The RSRP threshold changes the number of coverage candidates even when overall classification agreement remains relatively high. These results support treating thresholds as explicit policy parameters rather than immutable physical boundaries.
+
+The proposed framework is therefore best viewed as a measurement and prioritization workflow. It reduces predictable heterogeneity before device comparison and provides a transparent way to prioritize observed cell-level impact. It does not constitute an automated root-cause diagnosis system.
+
+% ============================================================
+% VIII. LIMITATIONS AND THREATS TO VALIDITY
+% ============================================================
+\section{Limitations and Threats to Validity}
+
+Several limitations constrain the interpretation of the results.
+
+First, the dataset comes from a single cellular operator in Kazakhstan. Generalization to other operators, countries, device populations, application mixes, or network architectures is therefore not established.
+
+Second, the available device identifier does not provide a usable individual-handset population beyond the 11 values observed in the dataset. Consequently, the analysis cannot explicitly model repeated observations from the same physical handset. This limitation is partly mitigated by the cell-aware analysis but remains relevant to uncertainty estimation.
+
+Third, the device comparison is observational. Although workload, reported network category, reported signal strength, and active measurement status are restricted, serving-cell effects are controlled only through the fixed-effects model, while spectrum, bandwidth, instantaneous load, interference, transport conditions, and software state remain incompletely observed.
+
+Fourth, the reported signal-strength field is treated as an RSRP proxy. The supplied telemetry does not independently expose all radio-layer details needed to verify the exact measurement semantics or to distinguish RSRP from other signal-quality indicators. The $-80$ and $-95$\,dBm thresholds should therefore not be interpreted as universal radio engineering boundaries.
+
+Fifth, page download speed is an application-level measurement. It can depend on content size, page composition, protocol behavior, server-side latency, caching, and other non-radio factors. The metric should not be equated with cell throughput or physical-layer capacity.
+
+Sixth, the session-quality thresholds are operational heuristics. In particular, the latency threshold shows greater sensitivity than the tested throughput threshold. Production use would require validation against operator service objectives, network counters, or user-perceived quality.
+
+Seventh, the cell-level triage categories are not root-cause labels. A strong reported signal together with elevated failure rates can be consistent with congestion but can also occur under interference, transport limitations, server-side conditions, or other causes. Likewise, weak signal can be associated with coverage limitations without proving coverage as the dominant cause.
+
+Finally, the exploratory predictive analysis is not intended as a causal model. The temporal split reduces one source of evaluation optimism, but cells and device models can still appear in both training and test periods. Its purpose is to characterize predictable information sources, not to claim generalization to unseen network infrastructure.
+
+% ============================================================
+% IX. FUTURE WORK
+% ============================================================
+\section{Future Work}
+
+The most direct extension is to incorporate richer network-side measurements into the same segmentation framework. Cell load, PRB utilization, scheduler indicators, transport utilization, radio-quality measures such as SINR, and backhaul status would make it possible to test whether the current candidate classifications correspond to identifiable network mechanisms.
+
+A second direction is hierarchical modeling of session-quality risk. Instead of ranking cells only by observed failure count, a future model could estimate expected failure probability from workload, device model, signal conditions, time, and network category, and then prioritize cells according to excess observed failures relative to that baseline.
+
+Third, additional validation should examine temporal stability of high-impact cells. A cell that appears in the top-50 during a short observation period may represent either a persistent issue or a temporary event. Repeated time-window analysis would distinguish these cases.
+
+Fourth, larger device populations with individual handset identifiers would allow direct repeated-measures analysis and would provide a stronger basis for separating device-level variation from environmental variation.
+
+Finally, the segmented telemetry can serve as a preprocessing stage for AI/ML-assisted RAN management. Current 3GPP work on AI/ML for NG-RAN includes data-collection support and use cases related to network optimization, including coverage and capacity optimization \cite{b6,b7}. The present study does not implement such an optimization loop, but it demonstrates why measurement context should be retained and controlled before telemetry is used by downstream learning systems.
+
+% ============================================================
+% X. CONCLUSION
+% ============================================================
+\section{Conclusion}
+
+This paper presented a telemetry segmentation procedure for device-model comparison and cell-level quality prioritization using application-level cellular measurements. Analysis of one million mobile web-browsing sessions from a single operator in Kazakhstan showed substantial workload dependence, with mean measured download speed ranging from 0.23 to 4.71\,Mbps across six web resources.
+
+After restricting the device comparison to a common web resource, reported 5G or LTE+ connectivity, reported signal strength of at least $-80$\,dBm, and an active-speed indicator, 40,439 sessions remained across ten device models. The Kruskal--Wallis test detected significant distributional differences, with $H(9)=6839.03$, $p<0.001$, and $\epsilon^2=0.169$. Median throughput ranged from 4.09 to 5.95\,Mbps.
+
+The cell-aware analysis provides the stronger robustness result. Of the 1,079 cells represented in the restricted device dataset, 695 (64.4\%) contain at least two evaluated device models. Device-model coefficients remain similar after serving-cell fixed effects and when the analysis is restricted to these multi-device cells. The findings therefore support persistent device-model associations under the measured operating regime, while still falling short of causal hardware attribution.
+
+At the cell level, 945 cells satisfy the minimum observation requirement and 856 exceed the 5\% failure-rate threshold. The 50 cells with the largest observed failure counts represent only 5.29\% of analyzed cells but account for 34.8\% of all 100,693 observed quality failures. Sensitivity analysis shows that this impact ranking is stable across the tested throughput thresholds but more sensitive to the latency threshold. The RSRP-based partition also changes with the selected signal boundary and is consequently retained as an operational triage heuristic rather than a root-cause classifier.
+
+Finally, a leakage-reduced exploratory predictive analysis shows that a simple Ridge model achieves $R^2=0.732$ on a temporal holdout, while a Random Forest achieves $R^2=0.729$. Web resource is the dominant predictive variable, reinforcing the need to account for workload before interpreting application-level throughput.
+
+Taken together, the results support a practical principle for cellular telemetry analysis: measurement context should be controlled before performance comparisons are interpreted, and cell quality should be evaluated using both the severity of degradation and the volume of observed user impact. The framework provides a reproducible basis for such analysis, while causal device attribution and network root-cause diagnosis require richer device- and network-side measurements.
+
+\balance
+
+% ============================================================
+% References
+% ============================================================
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

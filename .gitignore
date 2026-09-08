@@ -7,24 +7,25 @@ __pycache__/
 venv/
 env/
 
-# OS / editor
-.DS_Store
+# IDE / OS
 .vscode/
 .idea/
+.DS_Store
 
-# Data
+# Local data
 data/*.csv
 data/*.csv.gz
 data/*.parquet
 data/*.feather
 data/*.xlsx
 
-# Generated outputs
+# Generated results
 results/figures/*.png
 results/figures/*.pdf
 results/tables/*.csv
 results/metrics/*.json
+results/metrics/*.txt
 
-# Colab / local
-/content/
-/mnt/
+# Temporary files
+*.log
+*.tmp

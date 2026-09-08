@@ -8,49 +8,110 @@ import pandas as pd
 import yaml
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def resolve_project_path(path: str | Path) -> Path:
+    """
+    Resolve a configured path relative to the project root.
+
+    Absolute paths are preserved.
+    Relative paths are interpreted relative to the repository root.
+    """
+    path = Path(path)
+
+    if path.is_absolute():
+        return path
+
+    return PROJECT_ROOT / path
+
+
 def load_config(path: str | Path) -> dict[str, Any]:
     """Load YAML configuration."""
-    path = Path(path)
+    path = resolve_project_path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Configuration file not found: {path}"
+        )
+
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def ensure_output_dirs(config: dict[str, Any]) -> None:
-    """Create output directories declared in the configuration."""
+    """Create all output directories."""
     for key in ("figures", "tables", "metrics"):
-        Path(config["output"][key]).mkdir(parents=True, exist_ok=True)
+        path = resolve_project_path(config["output"][key])
+        path.mkdir(parents=True, exist_ok=True)
 
 
 def load_raw_csv(path: str | Path) -> pd.DataFrame:
-    """Load raw telemetry CSV."""
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Input data not found: {path}")
+    """Load the raw telemetry CSV."""
+    path = resolve_project_path(path)
 
-    df = pd.read_csv(
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Input data not found: {path}\n"
+            "Place webbrowsing.csv in the repository data/ directory."
+        )
+
+    print(f"Reading dataset: {path}")
+
+    return pd.read_csv(
         path,
         low_memory=False,
     )
-    return df
 
 
-def save_dataframe(df: pd.DataFrame, path: str | Path) -> None:
-    """Save a DataFrame, creating parent directories when needed."""
-    path = Path(path)
+def load_cleaned_parquet(path: str | Path) -> pd.DataFrame:
+    """Load the cleaned Parquet dataset."""
+    path = resolve_project_path(path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Cleaned Parquet not found: {path}\n"
+            "Run scripts/run_all.py first."
+        )
+
+    return pd.read_parquet(path)
+
+
+def save_dataframe(
+    df: pd.DataFrame,
+    path: str | Path,
+) -> None:
+    """Save a DataFrame as Parquet."""
+    path = resolve_project_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path, index=False)
 
 
-def save_json(payload: dict[str, Any], path: str | Path) -> None:
+def save_json(
+    payload: dict[str, Any],
+    path: str | Path,
+) -> None:
     """Save JSON metrics."""
-    path = Path(path)
+    path = resolve_project_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+
     with path.open("w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, default=str)
+        json.dump(
+            payload,
+            f,
+            indent=2,
+            default=str,
+        )
 
 
-def save_csv(df: pd.DataFrame, path: str | Path) -> None:
-    """Save tabular results."""
-    path = Path(path)
+def save_csv(
+    df: pd.DataFrame,
+    path: str | Path,
+) -> None:
+    """Save CSV results."""
+    path = resolve_project_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False)
+    df.to_csv(
+        path,
+        index=False,
+    )
